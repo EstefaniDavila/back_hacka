@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy import (
     BigInteger, Boolean, Date, DateTime, ForeignKey, Integer,
     Numeric, SmallInteger, String, Text, UUID, JSON
-)
+) 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
