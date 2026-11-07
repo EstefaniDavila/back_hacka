@@ -11,6 +11,7 @@ from app.core.health import router as health_router
 from app.core.logging import logger, setup_logging
 from app.db.session import close_db_connection
 from app.modules.geo.router import router as geo_router
+from app.modules.users.router import router as users_router
 
 
 @asynccontextmanager
@@ -48,6 +49,7 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 # Rutas API v1
 app.include_router(health_router, prefix=settings.API_V1_STR)
 app.include_router(geo_router, prefix=settings.API_V1_STR)
+app.include_router(users_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/", tags=["Root"])

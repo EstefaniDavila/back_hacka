@@ -43,6 +43,29 @@ class EntityNotFoundException(VeciRedException):
         )
 
 
+class ValidationException(VeciRedException):
+    """Lanzada cuando los datos proporcionados no superan las validaciones de negocio."""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=message,
+            code="VALIDATION_ERROR",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            details=details,
+        )
+
+
+class AuthenticationException(VeciRedException):
+    """Lanzada ante fallos de credenciales o tokens inválidos."""
+
+    def __init__(self, message: str = "Credenciales de autenticación inválidas"):
+        super().__init__(
+            message=message,
+            code="AUTHENTICATION_FAILED",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
 async def vecired_exception_handler(
     request: Request, exc: VeciRedException
 ) -> JSONResponse:

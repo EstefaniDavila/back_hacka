@@ -25,6 +25,11 @@ class Settings(BaseSettings):
 
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
+    # Supabase Auth
+    SUPABASE_URL: str = "https://gipoemmdfoxbcrsjtkrj.supabase.co"
+    SUPABASE_KEY: str = ""
+    SUPABASE_JWT_SECRET: str = ""
+
     # PostgreSQL / Supabase
     DATABASE_URL: str = ""
     DB_POOL_SIZE: int = 5
