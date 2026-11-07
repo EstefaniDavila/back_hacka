@@ -120,3 +120,4 @@ async def get_current_user(
         role=role,
         raw_claims=payload,
     )
+

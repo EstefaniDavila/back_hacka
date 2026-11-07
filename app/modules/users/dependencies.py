@@ -10,3 +10,4 @@ def get_user_service(
 ) -> UserService:
     """Provee una instancia de UserService con la sesión de base de datos inyectada."""
     return UserService(session)
+

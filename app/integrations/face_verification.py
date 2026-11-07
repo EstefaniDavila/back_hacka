@@ -93,3 +93,4 @@ class FaceVerificationService:
 
 # Instancia única del servicio
 face_verification_service = FaceVerificationService()
+

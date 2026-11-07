@@ -126,3 +126,4 @@ class VerificationStatusSummaryResponse(BaseModel):
     residence_status: str
     community_id: Optional[uuid.UUID] = None
     community_name: Optional[str] = None
+
