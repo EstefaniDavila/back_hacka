@@ -1,4 +1,16 @@
-"""Módulo de emergencies para VeciRed IA."""
-from .models import Emergency, EmergencyNeed, EmergencyContribution, CollectionPoint, VulnerabilityReport, EmergencyAlert, AlertDelivery
+"""Módulo de emergencias vecinales de VeciRed IA."""
+from .models import (
+    Emergency,
+    EmergencyAlert,
+    EmergencyContribution,
+    EmergencyNeed,
+)
+from .router import router
 
-__all__ = ['Emergency', 'EmergencyNeed', 'EmergencyContribution', 'CollectionPoint', 'VulnerabilityReport', 'EmergencyAlert', 'AlertDelivery']
+__all__ = [
+    "Emergency",
+    "EmergencyAlert",
+    "EmergencyContribution",
+    "EmergencyNeed",
+    "router",
+]

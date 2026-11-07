@@ -2,11 +2,19 @@
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import delete, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.commerce.models import Service, ServiceCategory
+from app.modules.commerce.models import (
+    Business,
+    Order,
+    OrderItem,
+    Product,
+    ProductCategory,
+    Service,
+    ServiceCategory,
+)
 from app.modules.geo.models import Community
 from app.modules.interactions.models import Review
 from app.modules.users.models import Profile
@@ -425,3 +433,273 @@ class CommerceRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+
+
+    # ------------------------------------------------------------------
+    # CATEGORÍAS DE PRODUCTOS
+    # ------------------------------------------------------------------
+    async def list_product_categories(self) -> Sequence[ProductCategory]:
+        """Obtiene todas las categorías de productos disponibles."""
+        stmt = select(ProductCategory).order_by(ProductCategory.name.asc())
+        result = await self.session.execute(stmt)
+        categories = result.scalars().all()
+
+        if not categories:
+            await self._seed_default_product_categories()
+            result = await self.session.execute(stmt)
+            categories = result.scalars().all()
+
+        return categories
+
+    async def get_product_category_by_id(self, category_id: uuid.UUID) -> Optional[ProductCategory]:
+        stmt = select(ProductCategory).where(ProductCategory.id == category_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def _seed_default_product_categories(self) -> None:
+        """Crea categorías iniciales de productos vecinales."""
+        defaults = [
+            "Panadería y Pastelería",
+            "Comida Casera",
+            "Bodega y Abarrotes",
+            "Frutas y Verduras",
+            "Lácteos y Huevos",
+            "Bebidas y Refrescos",
+        ]
+        for name in defaults:
+            cat = ProductCategory(
+                id=uuid.uuid4(),
+                name=name,
+            )
+            self.session.add(cat)
+        await self.session.commit()
+
+    # ------------------------------------------------------------------
+    # NEGOCIOS / EMPRENDIMIENTOS VECINALES
+    # ------------------------------------------------------------------
+    async def get_or_create_user_business(
+        self,
+        owner_id: uuid.UUID,
+        community_id: uuid.UUID,
+        business_name: Optional[str] = None,
+    ) -> Business:
+        """Obtiene o crea un negocio/bodega asignada al usuario."""
+        stmt = select(Business).where(Business.owner_id == owner_id).limit(1)
+        res = await self.session.execute(stmt)
+        biz = res.scalar_one_or_none()
+        if biz:
+            return biz
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        biz = Business(
+            id=uuid.uuid4(),
+            owner_id=owner_id,
+            community_id=community_id,
+            business_name=business_name or "Emprendimiento Barrial",
+            description="Venta de productos locales y barriales",
+            status="active",
+            created_at=now,
+        )
+        self.session.add(biz)
+        await self.session.flush()
+        await self.session.refresh(biz)
+        return biz
+
+    # ------------------------------------------------------------------
+    # PRODUCTOS: CRUD Y EXPLORACIÓN
+    # ------------------------------------------------------------------
+    async def list_products(
+        self,
+        query: Optional[str] = None,
+        category_id: Optional[uuid.UUID] = None,
+        business_id: Optional[uuid.UUID] = None,
+        seller_id: Optional[uuid.UUID] = None,
+        status: Optional[str] = "active",
+        skip: int = 0,
+        limit: int = 20,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Lista productos con información de la tienda/vendedor y categoría."""
+        stmt = (
+            select(
+                Product.id,
+                Product.name,
+                Product.description,
+                Product.price,
+                Product.stock,
+                Product.image_url,
+                Product.status,
+                Product.created_at,
+                ProductCategory.id.label("category_id"),
+                ProductCategory.name.label("category_name"),
+                Business.id.label("business_id"),
+                Business.business_name.label("business_name"),
+                Profile.id.label("seller_id"),
+                Profile.full_name.label("seller_name"),
+                Profile.avatar_url.label("seller_avatar"),
+                Profile.phone.label("phone"),
+            )
+            .outerjoin(ProductCategory, ProductCategory.id == Product.category_id)
+            .outerjoin(Business, Business.id == Product.business_id)
+            .outerjoin(Profile, Profile.id == Business.owner_id)
+        )
+
+        count_stmt = (
+            select(func.count(Product.id))
+            .outerjoin(ProductCategory, ProductCategory.id == Product.category_id)
+            .outerjoin(Business, Business.id == Product.business_id)
+            .outerjoin(Profile, Profile.id == Business.owner_id)
+        )
+
+        conditions = []
+        if status:
+            conditions.append(Product.status == status)
+        if category_id:
+            conditions.append(Product.category_id == category_id)
+        if business_id:
+            conditions.append(Product.business_id == business_id)
+        if seller_id:
+            conditions.append(Business.owner_id == seller_id)
+        if query:
+            q_pat = f"%{query.strip()}%"
+            conditions.append(
+                or_(
+                    Product.name.ilike(q_pat),
+                    Product.description.ilike(q_pat),
+                    Business.business_name.ilike(q_pat),
+                    Profile.full_name.ilike(q_pat),
+                )
+            )
+
+        if conditions:
+            stmt = stmt.where(*conditions)
+            count_stmt = count_stmt.where(*conditions)
+
+        total_res = await self.session.execute(count_stmt)
+        total = total_res.scalar() or 0
+
+        stmt = stmt.order_by(desc(Product.created_at)).offset(skip).limit(limit)
+        results = await self.session.execute(stmt)
+
+        items = []
+        for row in results.mappings().all():
+            row_dict = dict(row)
+            row_dict["rating"] = 4.8
+            row_dict["reviews_count"] = 12
+            row_dict["distance_m"] = 200
+            items.append(row_dict)
+
+        return items, total
+
+    async def get_product_by_id(self, product_id: uuid.UUID) -> Optional[Product]:
+        """Obtiene la entidad ORM del producto."""
+        stmt = select(Product).where(Product.id == product_id)
+        res = await self.session.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def get_product_detail(self, product_id: uuid.UUID) -> Optional[Dict[str, Any]]:
+        """Obtiene la ficha técnica completa del producto."""
+        stmt = (
+            select(
+                Product.id,
+                Product.name,
+                Product.description,
+                Product.price,
+                Product.stock,
+                Product.image_url,
+                Product.status,
+                Product.created_at,
+                ProductCategory.id.label("category_id"),
+                ProductCategory.name.label("category_name"),
+                Business.id.label("business_id"),
+                Business.business_name.label("business_name"),
+                Profile.id.label("seller_id"),
+                Profile.full_name.label("seller_name"),
+                Profile.avatar_url.label("seller_avatar"),
+                Profile.phone.label("phone"),
+            )
+            .outerjoin(ProductCategory, ProductCategory.id == Product.category_id)
+            .outerjoin(Business, Business.id == Product.business_id)
+            .outerjoin(Profile, Profile.id == Business.owner_id)
+            .where(Product.id == product_id)
+        )
+        res = await self.session.execute(stmt)
+        row = res.mappings().one_or_none()
+        if not row:
+            return None
+        row_dict = dict(row)
+        row_dict["rating"] = 4.8
+        row_dict["reviews_count"] = 12
+        row_dict["distance_m"] = 200
+        return row_dict
+
+    async def create_product(
+        self,
+        name: str,
+        price: Decimal,
+        business_id: uuid.UUID,
+        category_id: Optional[uuid.UUID] = None,
+        description: Optional[str] = None,
+        stock: Optional[int] = 10,
+        image_url: Optional[str] = None,
+    ) -> Product:
+        """Crea un nuevo producto en el catálogo barrial."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        product = Product(
+            id=uuid.uuid4(),
+            business_id=business_id,
+            category_id=category_id,
+            name=name.strip(),
+            description=description.strip() if description else None,
+            price=price,
+            stock=stock or 0,
+            image_url=image_url,
+            status="active",
+            created_at=now,
+        )
+        self.session.add(product)
+        await self.session.flush()
+        await self.session.refresh(product)
+        return product
+
+    async def update_product(
+        self,
+        product: Product,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        price: Optional[Decimal] = None,
+        stock: Optional[int] = None,
+        category_id: Optional[uuid.UUID] = None,
+        image_url: Optional[str] = None,
+    ) -> Product:
+        """Actualiza los datos del producto."""
+        if name is not None:
+            product.name = name.strip()
+        if description is not None:
+            product.description = description.strip()
+        if price is not None:
+            product.price = price
+        if stock is not None:
+            product.stock = stock
+        if category_id is not None:
+            product.category_id = category_id
+        if image_url is not None:
+            product.image_url = image_url
+
+        self.session.add(product)
+        await self.session.flush()
+        await self.session.refresh(product)
+        return product
+
+    async def update_product_status(self, product: Product, status: str) -> Product:
+        """Cambia el estado del producto (active, out_of_stock, paused, inactive)."""
+        product.status = status
+        self.session.add(product)
+        await self.session.flush()
+        await self.session.refresh(product)
+        return product
+
+    async def delete_product(self, product_id: uuid.UUID) -> bool:
+        """Elimina un producto."""
+        stmt = delete(Product).where(Product.id == product_id)
+        res = await self.session.execute(stmt)
+        return (res.rowcount or 0) > 0

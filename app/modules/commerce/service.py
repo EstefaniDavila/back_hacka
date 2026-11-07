@@ -1,13 +1,19 @@
-"""Lógica de negocio y servicios para el módulo de comercio de VeciRed IA."""
+"""Lógica de negocio y servicios para el módulo de comercio (servicios y productos) de VeciRed IA."""
 import math
 import uuid
 from typing import List, Optional, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import EntityNotFoundException, ValidationException, VeciRedException
-from app.modules.commerce.models import Service, ServiceCategory
+from app.modules.commerce.models import Product, Service, ServiceCategory
 from app.modules.commerce.repository import CommerceRepository
 from app.modules.commerce.schemas import (
+    ProductCategoryResponse,
+    ProductCreate,
+    ProductDetailResponse,
+    ProductListItemResponse,
+    ProductStatusUpdate,
+    ProductUpdate,
     ReviewCreate,
     ReviewResponse,
     ServiceCategoryResponse,
@@ -21,14 +27,14 @@ from app.shared.pagination import PageMeta, PaginatedResponse
 
 
 class CommerceService:
-    """Capa de reglas de negocio para servicios, categorías y reseñas barriales."""
+    """Capa de reglas de negocio para servicios, productos barriales, categorías y reseñas."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = CommerceRepository(session)
 
     # -------------------------------------------------------------
-    # Categorías
+    # Categorías de Servicios
     # -------------------------------------------------------------
     async def list_categories(self) -> List[ServiceCategoryResponse]:
         """Retorna todas las categorías de servicios disponibles para los vecinos."""
@@ -83,12 +89,10 @@ class CommerceService:
         data: ServiceCreate,
     ) -> ServiceDetailResponse:
         """Crea una nueva publicación de servicio asignada al vecino autenticado."""
-        # Validar existencia de categoría
         category = await self.repository.get_category_by_id(data.category_id)
         if not category:
             raise EntityNotFoundException("Categoría de servicio", data.category_id)
 
-        # Determinar comunidad (si no se especifica, tomar la primera activa)
         community_id = data.community_id
         if not community_id:
             community_id = await self.repository.get_first_active_community_id()
@@ -107,8 +111,6 @@ class CommerceService:
             availability=data.availability,
         )
         await self.session.commit()
-
-        # Retornar detalle con la información completa
         return await self.get_service_detail(service.id)
 
     async def update_service(
@@ -144,7 +146,6 @@ class CommerceService:
             availability=data.availability,
         )
         await self.session.commit()
-
         return await self.get_service_detail(service.id)
 
     async def update_service_status(
@@ -167,7 +168,6 @@ class CommerceService:
 
         await self.repository.update_status(service, status_update.status)
         await self.session.commit()
-
         return await self.get_service_detail(service.id)
 
     async def delete_service(
@@ -190,9 +190,6 @@ class CommerceService:
         await self.repository.delete_service(service, soft_delete=True)
         await self.session.commit()
 
-    # -------------------------------------------------------------
-    # Servicios Propios y por Vecino
-    # -------------------------------------------------------------
     async def list_my_services(
         self,
         user_id: uuid.UUID,
@@ -203,7 +200,7 @@ class CommerceService:
         skip = (page - 1) * limit
         items_data, total = await self.repository.list_services(
             provider_id=user_id,
-            status=None,  # Incluye activos y pausados
+            status=None,
             skip=skip,
             limit=limit,
         )
@@ -237,9 +234,6 @@ class CommerceService:
             meta=PageMeta(total=total, page=page, limit=limit, total_pages=total_pages),
         )
 
-    # -------------------------------------------------------------
-    # Valoraciones / Reviews
-    # -------------------------------------------------------------
     async def add_service_review(
         self,
         service_id: uuid.UUID,
@@ -267,7 +261,6 @@ class CommerceService:
         )
         await self.session.commit()
 
-        # Retornar la reseña con datos del revisor
         reviews = await self.repository.get_service_reviews(service_id, limit=1)
         if reviews:
             return ReviewResponse(**reviews[0])
@@ -298,3 +291,123 @@ class CommerceService:
         reviews_data = await self.repository.get_service_reviews(service_id, skip=skip, limit=limit)
         return [ReviewResponse(**r) for r in reviews_data]
 
+    # =============================================================
+    # PRODUCTOS BARRIALES (COMERCIO LOCAL)
+    # =============================================================
+    async def list_product_categories(self) -> List[ProductCategoryResponse]:
+        """Obtiene todas las categorías de productos."""
+        cats = await self.repository.list_product_categories()
+        return [ProductCategoryResponse.model_validate(c) for c in cats]
+
+    async def list_products(
+        self,
+        query: Optional[str] = None,
+        category_id: Optional[uuid.UUID] = None,
+        business_id: Optional[uuid.UUID] = None,
+        seller_id: Optional[uuid.UUID] = None,
+        status: Optional[str] = "active",
+        page: int = 1,
+        limit: int = 20,
+    ) -> PaginatedResponse[ProductListItemResponse]:
+        """Lista productos con filtros y paginación."""
+        skip = (page - 1) * limit
+        items_data, total = await self.repository.list_products(
+            query=query,
+            category_id=category_id,
+            business_id=business_id,
+            seller_id=seller_id,
+            status=status,
+            skip=skip,
+            limit=limit,
+        )
+        total_pages = math.ceil(total / limit) if total > 0 else 1
+        items = [ProductListItemResponse(**item) for item in items_data]
+
+        return PaginatedResponse(
+            items=items,
+            meta=PageMeta(total=total, page=page, limit=limit, total_pages=total_pages),
+        )
+
+    async def get_product_detail(self, product_id: uuid.UUID) -> ProductDetailResponse:
+        """Obtiene la ficha técnica completa del producto."""
+        detail = await self.repository.get_product_detail(product_id)
+        if not detail:
+            raise EntityNotFoundException("Producto", product_id)
+        return ProductDetailResponse(**detail)
+
+    async def create_product(
+        self,
+        user_id: uuid.UUID,
+        data: ProductCreate,
+    ) -> ProductDetailResponse:
+        """Crea un nuevo producto asignado al negocio del usuario."""
+        business_id = data.business_id
+        if not business_id:
+            community_id = await self.repository.get_first_active_community_id()
+            if not community_id:
+                raise ValidationException("No hay una comunidad vecinal activa para vincular la tienda.")
+            biz = await self.repository.get_or_create_user_business(owner_id=user_id, community_id=community_id)
+            business_id = biz.id
+
+        prod = await self.repository.create_product(
+            name=data.name,
+            price=data.price,
+            business_id=business_id,
+            category_id=data.category_id,
+            description=data.description,
+            stock=data.stock,
+            image_url=data.image_url,
+        )
+        await self.session.commit()
+        return await self.get_product_detail(prod.id)
+
+    async def update_product(
+        self,
+        product_id: uuid.UUID,
+        user_id: uuid.UUID,
+        data: ProductUpdate,
+    ) -> ProductDetailResponse:
+        """Actualiza un producto propio."""
+        prod = await self.repository.get_product_by_id(product_id)
+        if not prod:
+            raise EntityNotFoundException("Producto", product_id)
+
+        await self.repository.update_product(
+            product=prod,
+            name=data.name,
+            description=data.description,
+            price=data.price,
+            stock=data.stock,
+            category_id=data.category_id,
+            image_url=data.image_url,
+        )
+        await self.session.commit()
+        return await self.get_product_detail(prod.id)
+
+    async def update_product_status(
+        self,
+        product_id: uuid.UUID,
+        user_id: uuid.UUID,
+        status_update: ProductStatusUpdate,
+    ) -> ProductDetailResponse:
+        """Actualiza el estado de disponibilidad del producto."""
+        prod = await self.repository.get_product_by_id(product_id)
+        if not prod:
+            raise EntityNotFoundException("Producto", product_id)
+
+        await self.repository.update_product_status(prod, status_update.status)
+        await self.session.commit()
+        return await self.get_product_detail(prod.id)
+
+    async def delete_product(
+        self,
+        product_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        """Elimina un producto del catálogo."""
+        prod = await self.repository.get_product_by_id(product_id)
+        if not prod:
+            raise EntityNotFoundException("Producto", product_id)
+
+        await self.repository.delete_product(product_id)
+        await self.session.commit()

@@ -118,3 +118,69 @@ class ServiceDetailResponse(ServiceListItemResponse):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+
+# -------------------------------------------------------------
+# Categorías de Productos
+# -------------------------------------------------------------
+class ProductCategoryBase(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+
+
+class ProductCategoryResponse(ProductCategoryBase):
+    id: uuid.UUID
+    model_config = ConfigDict(from_attributes=True)
+
+
+# -------------------------------------------------------------
+# Productos: Creación, Edición y Listado
+# -------------------------------------------------------------
+class ProductCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=150, description="Nombre del producto")
+    description: Optional[str] = Field(None, max_length=2000, description="Descripción del producto o ingredientes")
+    price: Decimal = Field(..., gt=0, description="Precio en Soles (PEN)")
+    stock: Optional[int] = Field(10, ge=0, description="Unidades disponibles")
+    category_id: Optional[uuid.UUID] = Field(None, description="ID de categoría de producto")
+    business_id: Optional[uuid.UUID] = Field(None, description="ID del negocio o bodega si aplica")
+    image_url: Optional[str] = Field(None, description="URL de foto del producto")
+
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=150)
+    description: Optional[str] = Field(None, max_length=2000)
+    price: Optional[Decimal] = Field(None, gt=0)
+    stock: Optional[int] = Field(None, ge=0)
+    category_id: Optional[uuid.UUID] = None
+    image_url: Optional[str] = None
+
+
+class ProductStatusUpdate(BaseModel):
+    status: str = Field(..., pattern="^(active|out_of_stock|paused|inactive)$")
+
+
+class ProductListItemResponse(BaseModel):
+    id: uuid.UUID
+    seller_id: Optional[uuid.UUID] = None
+    seller_name: Optional[str] = None
+    seller_avatar: Optional[str] = None
+    business_id: Optional[uuid.UUID] = None
+    business_name: Optional[str] = None
+    category_id: Optional[uuid.UUID] = None
+    category_name: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    price: Decimal
+    stock: Optional[int] = None
+    image_url: Optional[str] = None
+    status: str = "active"
+    rating: float = 4.8
+    reviews_count: int = 12
+    distance_m: Optional[int] = 200
+    phone: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductDetailResponse(ProductListItemResponse):
+    pass

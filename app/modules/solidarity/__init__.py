@@ -1,4 +1,5 @@
-"""Módulo de solidarity para VeciRed IA."""
+"""Módulo de solidaridad y muro vecinal de VeciRed IA."""
 from .models import SolidarityPost, SolidarityResponse
+from .router import router
 
-__all__ = ['SolidarityPost', 'SolidarityResponse']
+__all__ = ["SolidarityPost", "SolidarityResponse", "router"]
