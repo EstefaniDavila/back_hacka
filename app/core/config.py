@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from typing import List, Union
 from pydantic import field_validator
@@ -34,14 +35,26 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: Union[str, None]) -> str:
-        """Garantiza que el esquema use el driver asyncpg."""
+        """Garantiza que el esquema use el driver asyncpg y soporte IPv4 de Supabase."""
         if not v or not isinstance(v, str) or v.strip() == "":
             return ""
         clean_url = v.strip()
         if clean_url.startswith("postgresql://"):
-            return clean_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            clean_url = clean_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         elif clean_url.startswith("postgres://"):
-            return clean_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            clean_url = clean_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
+        # Si el usuario configura la conexión directa de Supabase (db.<ref>.supabase.co),
+        # adaptar automáticamente al Pooler IPv4 para evitar el error de red IPv6 en WSL / Docker
+        supabase_match = re.search(r"@db\.([a-z0-9]+)\.supabase\.co", clean_url)
+        if supabase_match:
+            project_ref = supabase_match.group(1)
+            clean_url = re.sub(
+                r"://postgres:([^@]+)@db\.[a-z0-9]+\.supabase\.co(?::[0-9]+)?",
+                rf"://postgres.{project_ref}:\1@aws-0-us-east-1.pooler.supabase.com:6543",
+                clean_url,
+            )
+
         return clean_url
 
 
