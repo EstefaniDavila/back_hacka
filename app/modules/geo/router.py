@@ -7,6 +7,9 @@ from app.modules.geo.schemas import (
     DepartmentCreate,
     DepartmentResponse,
     DepartmentUpdate,
+    ServiceMapMarker,
+    EmergencyMapMarker,
+    MapOverviewResponse,
 )
 from app.modules.geo.service import GeoService
 from app.shared.pagination import PaginatedResponse
@@ -105,3 +108,41 @@ async def create_community(
     service: GeoService = Depends(get_geo_service),
 ):
     return await service.create_community(data)
+
+
+# --- Endpoints de Mapa Vecinal e Interactivo ---
+
+@router.get(
+    "/map/services",
+    response_model=List[ServiceMapMarker],
+    summary="Obtener marcadores de servicios en el mapa",
+)
+async def get_services_map(
+    service: GeoService = Depends(get_geo_service),
+):
+    """Retorna las personas y negocios que ofrecen servicios con sus coordenadas para el mapa."""
+    return await service.get_services_map_markers()
+
+
+@router.get(
+    "/map/emergencies",
+    response_model=List[EmergencyMapMarker],
+    summary="Obtener marcadores de emergencias activas en el mapa",
+)
+async def get_emergencies_map(
+    service: GeoService = Depends(get_geo_service),
+):
+    """Retorna los puntos geográficos donde se encuentran activadas emergencias vecinales."""
+    return await service.get_emergencies_map_markers()
+
+
+@router.get(
+    "/map/all",
+    response_model=MapOverviewResponse,
+    summary="Obtener vista integral del mapa (servicios y emergencias)",
+)
+async def get_map_all(
+    service: GeoService = Depends(get_geo_service),
+):
+    """Retorna de manera unificada servicios y emergencias para la renderización del mapa."""
+    return await service.get_map_overview()

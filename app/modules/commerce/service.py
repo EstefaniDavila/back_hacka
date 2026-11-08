@@ -8,6 +8,7 @@ from app.core.exceptions import EntityNotFoundException, ValidationException, Ve
 from app.modules.commerce.models import Product, Service, ServiceCategory
 from app.modules.commerce.repository import CommerceRepository
 from app.modules.commerce.schemas import (
+    ProductCategoryCreate,
     ProductCategoryResponse,
     ProductCreate,
     ProductDetailResponse,
@@ -89,9 +90,14 @@ class CommerceService:
         data: ServiceCreate,
     ) -> ServiceDetailResponse:
         """Crea una nueva publicación de servicio asignada al vecino autenticado."""
-        category = await self.repository.get_category_by_id(data.category_id)
+        cat_id = data.category_id
+        if not cat_id:
+            all_cats = await self.repository.list_categories()
+            if all_cats:
+                cat_id = all_cats[0].id if hasattr(all_cats[0], 'id') else all_cats[0]['id']
+        category = await self.repository.get_category_by_id(cat_id) if cat_id else None
         if not category:
-            raise EntityNotFoundException("Categoría de servicio", data.category_id)
+            raise EntityNotFoundException("Categoría de servicio", cat_id or data.category_id)
 
         community_id = data.community_id
         if not community_id:
@@ -101,7 +107,7 @@ class CommerceService:
 
         service = await self.repository.create_service(
             provider_id=user_id,
-            category_id=data.category_id,
+            category_id=cat_id,
             community_id=community_id,
             address_id=data.address_id,
             title=data.title,
@@ -136,11 +142,12 @@ class CommerceService:
             if not category:
                 raise EntityNotFoundException("Categoría de servicio", data.category_id)
 
+        cat_id = data.category_id if data.category_id is not None else service.category_id
         await self.repository.update_service(
             service=service,
             title=data.title,
             description=data.description,
-            category_id=data.category_id,
+            category_id=cat_id,
             price_from=data.price_from,
             price_unit=data.price_unit,
             availability=data.availability,
@@ -349,11 +356,16 @@ class CommerceService:
             biz = await self.repository.get_or_create_user_business(owner_id=user_id, community_id=community_id)
             business_id = biz.id
 
+        cat_id = data.category_id
+        if not cat_id:
+            all_cats = await self.repository.list_product_categories()
+            if all_cats:
+                cat_id = all_cats[0].id if hasattr(all_cats[0], 'id') else all_cats[0]['id']
         prod = await self.repository.create_product(
             name=data.name,
             price=data.price,
             business_id=business_id,
-            category_id=data.category_id,
+            category_id=cat_id,
             description=data.description,
             stock=data.stock,
             image_url=data.image_url,
@@ -372,13 +384,14 @@ class CommerceService:
         if not prod:
             raise EntityNotFoundException("Producto", product_id)
 
+        cat_id = data.category_id if data.category_id is not None else prod.category_id
         await self.repository.update_product(
             product=prod,
             name=data.name,
             description=data.description,
             price=data.price,
             stock=data.stock,
-            category_id=data.category_id,
+            category_id=cat_id,
             image_url=data.image_url,
         )
         await self.session.commit()
@@ -411,3 +424,12 @@ class CommerceService:
 
         await self.repository.delete_product(product_id)
         await self.session.commit()
+
+    async def create_product_category(
+        self,
+        data: ProductCategoryCreate,
+    ) -> ProductCategoryResponse:
+        """Crea y persiste una nueva categoría de productos barriales."""
+        cat = await self.repository.create_product_category(name=data.name)
+        await self.session.commit()
+        return ProductCategoryResponse.model_validate(cat)

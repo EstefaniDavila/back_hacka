@@ -10,10 +10,13 @@ from app.core.exceptions import (
 from app.core.health import router as health_router
 from app.core.logging import logger, setup_logging
 from app.db.session import close_db_connection
+from app.modules.chat.router import router as chat_router
 from app.modules.commerce.products_router import router as products_router
 from app.modules.commerce.router import router as commerce_router
 from app.modules.emergencies.router import router as emergencies_router
 from app.modules.geo.router import router as geo_router
+from app.modules.interactions.router import router as reviews_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.search.router import router as search_router
 from app.modules.solidarity.router import router as solidarity_router
 from app.modules.users.router import router as users_router
@@ -59,6 +62,9 @@ app.include_router(commerce_router, prefix=settings.API_V1_STR)
 app.include_router(products_router, prefix=settings.API_V1_STR)
 app.include_router(solidarity_router, prefix=settings.API_V1_STR)
 app.include_router(emergencies_router, prefix=settings.API_V1_STR)
+app.include_router(chat_router, prefix=settings.API_V1_STR)
+app.include_router(notifications_router, prefix=settings.API_V1_STR)
+app.include_router(reviews_router, prefix=settings.API_V1_STR)
 app.include_router(search_router, prefix=settings.API_V1_STR)
 
 

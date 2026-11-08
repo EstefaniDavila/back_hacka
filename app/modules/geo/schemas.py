@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -49,3 +49,40 @@ class CommunityResponse(CommunityBase):
     id: uuid.UUID = Field(..., description="Identificador UUID de la comunidad")
     created_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Marcadores para el Mapa Vecinal ---
+
+class ServiceMapMarker(BaseModel):
+    id: uuid.UUID = Field(..., description="ID del servicio")
+    title: str = Field(..., description="Nombre del servicio")
+    description: Optional[str] = None
+    price: Optional[float] = None
+    category_name: Optional[str] = "Servicios Generales"
+    category_icon: Optional[str] = "🔧"
+    provider_id: uuid.UUID
+    provider_name: str
+    provider_avatar: Optional[str] = None
+    provider_phone: Optional[str] = None
+    latitude: float
+    longitude: float
+    address_reference: Optional[str] = None
+    status: str = "active"
+
+
+class EmergencyMapMarker(BaseModel):
+    id: uuid.UUID = Field(..., description="ID de la alerta de emergencia")
+    title: str
+    description: Optional[str] = None
+    severity: str = "high"
+    status: str = "active"
+    latitude: float
+    longitude: float
+    address_reference: Optional[str] = None
+    alert_type_name: Optional[str] = "Emergencia General"
+    created_at: Optional[datetime] = None
+
+
+class MapOverviewResponse(BaseModel):
+    services: List[ServiceMapMarker] = Field(default_factory=list, description="Vecinos y comercios que ofrecen servicios")
+    emergencies: List[EmergencyMapMarker] = Field(default_factory=list, description="Puntos de emergencia activa")

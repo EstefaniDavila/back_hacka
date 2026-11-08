@@ -101,3 +101,18 @@ class AlertDelivery(Base):
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+
+class EmergencyVolunteer(Base):
+    """Modelo de persistencia para la tabla `emergency_volunteers`."""
+    __tablename__ = "emergency_volunteers"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    emergency_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    skill: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    avatar: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    distance_m: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=50)
+    status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, default="En camino")
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=datetime.utcnow)
+

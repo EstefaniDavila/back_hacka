@@ -62,7 +62,7 @@ class ProviderSummary(BaseModel):
 class ServiceCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=150, description="Título del servicio")
     description: Optional[str] = Field(None, max_length=2000, description="Descripción detallada de la oferta")
-    category_id: uuid.UUID = Field(..., description="ID de la categoría del servicio")
+    category_id: Optional[uuid.UUID] = Field(None, description="ID de la categoría del servicio")
     community_id: Optional[uuid.UUID] = Field(None, description="ID de la comunidad territorial (opcional si se infiere del usuario)")
     address_id: Optional[uuid.UUID] = Field(None, description="ID de dirección de referencia")
     price_from: Optional[Decimal] = Field(None, ge=0, description="Precio inicial o referencia en Soles")
@@ -125,6 +125,10 @@ class ServiceDetailResponse(ServiceListItemResponse):
 # -------------------------------------------------------------
 class ProductCategoryBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
+
+
+class ProductCategoryCreate(ProductCategoryBase):
+    pass
 
 
 class ProductCategoryResponse(ProductCategoryBase):

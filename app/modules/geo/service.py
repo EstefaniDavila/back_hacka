@@ -2,13 +2,16 @@ import math
 from typing import Sequence
 from app.core.exceptions import EntityNotFoundException, VeciRedException
 from app.modules.geo.models import Department, Community
-from app.modules.geo.repository import DepartmentRepository, CommunityRepository
+from app.modules.geo.repository import DepartmentRepository, CommunityRepository, MapRepository
 from app.modules.geo.schemas import (
     CommunityCreate,
     CommunityUpdate,
     DepartmentCreate,
     DepartmentResponse,
     DepartmentUpdate,
+    ServiceMapMarker,
+    EmergencyMapMarker,
+    MapOverviewResponse,
 )
 from app.shared.pagination import PageMeta, PaginatedResponse
 
@@ -20,9 +23,11 @@ class GeoService:
         self,
         dept_repo: DepartmentRepository,
         comm_repo: CommunityRepository,
+        map_repo: MapRepository = None,
     ):
         self.dept_repo = dept_repo
         self.comm_repo = comm_repo
+        self.map_repo = map_repo or MapRepository(comm_repo.session)
 
     # --- Departamentos ---
 
@@ -91,3 +96,21 @@ class GeoService:
     async def create_community(self, data: CommunityCreate) -> Community:
         """Crea una comunidad."""
         return await self.comm_repo.create(data)
+
+    # --- Marcadores para el Mapa ---
+
+    async def get_services_map_markers(self) -> list[ServiceMapMarker]:
+        """Retorna la lista de servicios activos para ubicarlos en el mapa."""
+        raw_services = await self.map_repo.get_services_markers()
+        return [ServiceMapMarker(**s) for s in raw_services]
+
+    async def get_emergencies_map_markers(self) -> list[EmergencyMapMarker]:
+        """Retorna la lista de emergencias activas para el mapa."""
+        raw_emergencies = await self.map_repo.get_emergencies_markers()
+        return [EmergencyMapMarker(**e) for e in raw_emergencies]
+
+    async def get_map_overview(self) -> MapOverviewResponse:
+        """Retorna vista consolidada de servicios y emergencias en el mapa."""
+        services = await self.get_services_map_markers()
+        emergencies = await self.get_emergencies_map_markers()
+        return MapOverviewResponse(services=services, emergencies=emergencies)

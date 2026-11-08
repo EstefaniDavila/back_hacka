@@ -1,4 +1,5 @@
-"""Módulo de notifications para VeciRed IA."""
-from .models import UserDevice, Notification
+"""Módulo de notificaciones para VeciRed IA."""
+from .models import Notification, UserDevice
+from .router import router
 
-__all__ = ['UserDevice', 'Notification']
+__all__ = ["Notification", "UserDevice", "router"]

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
     # Supabase Auth
-    SUPABASE_URL: str = "https://gipoemmdfoxbcrsjtkrj.supabase.co"
+    SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = ""
 

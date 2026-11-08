@@ -53,8 +53,8 @@ class EmergencyContributionResponse(BaseModel):
 # ----------------------------------------------------------------------
 class EmergencyCreate(BaseModel):
     """Payload para reportar una emergencia en el barrio."""
-    emergency_type: str = Field(..., min_length=3, max_length=50, description="Tipo: inundacion, incendio, sismo, seguridad, medica, otro")
-    title: str = Field(..., min_length=5, max_length=150, description="Título breve (ej: Inundación en Mz 2)")
+    emergency_type: str = Field("seguridad", min_length=2, max_length=50, description="Tipo: inundacion, incendio, sismo, seguridad, medica, otro")
+    title: str = Field(..., min_length=3, max_length=150, description="Título breve (ej: Inundación en Mz 2)")
     description: Optional[str] = Field(None, max_length=2000, description="Detalle de lo ocurrido y requerimientos urgentes")
     severity: str = Field("high", pattern="^(low|medium|high|critical)$", description="Nivel de severidad")
     community_id: Optional[uuid.UUID] = Field(None, description="ID de la comunidad vecinal")
@@ -97,4 +97,24 @@ class EmergencyDetailResponse(EmergencyListItemResponse):
 
 class VolunteerRegister(BaseModel):
     """Payload para sumarse como voluntario ante la emergencia."""
+    emergency_id: Optional[uuid.UUID] = Field(None, description="ID de la emergencia a la que apoya")
+    name: Optional[str] = Field(None, max_length=150)
+    skill: Optional[str] = Field(None, max_length=100)
+    avatar: Optional[str] = Field("👤", max_length=50)
+    distance_m: Optional[int] = Field(50, description="Distancia real calculada en metros")
+    status: Optional[str] = Field("En camino", max_length=50)
     message: Optional[str] = Field(None, max_length=500, description="Mensaje o equipo disponible (ej: En camino con palas)")
+
+
+class VolunteerResponse(BaseModel):
+    """Ficha de un voluntario / brigadista vecinal en guardia."""
+    id: str
+    emergency_id: Optional[str] = None
+    user_id: Optional[str] = None
+    name: str
+    skill: str
+    avatar: str = "👤"
+    distance: str = "50m"
+    distance_m: int = 50
+    status: str = "En guardia"
+    model_config = ConfigDict(from_attributes=True)

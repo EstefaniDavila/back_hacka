@@ -3,12 +3,14 @@ import math
 import uuid
 from decimal import Decimal
 from typing import List, Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import EntityNotFoundException, ValidationException, VeciRedException
 from app.modules.emergencies.models import Emergency, EmergencyNeed
 from app.modules.emergencies.repository import EmergencyRepository
 from app.modules.emergencies.schemas import (
+    VolunteerResponse,
     EmergencyContributionCreate,
     EmergencyContributionResponse,
     EmergencyCreate,
@@ -19,6 +21,7 @@ from app.modules.emergencies.schemas import (
     EmergencyStatusUpdate,
     VolunteerRegister,
 )
+from app.modules.notifications.repository import NotificationRepository
 from app.shared.pagination import PageMeta, PaginatedResponse
 
 
@@ -28,6 +31,7 @@ class EmergencyService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = EmergencyRepository(session)
+        self.notif_repository = NotificationRepository(session)
 
     async def list_emergencies(
         self,
@@ -64,6 +68,15 @@ class EmergencyService:
         if not active:
             return None
         return EmergencyListItemResponse(**active)
+
+    async def list_active_emergencies(
+        self,
+        community_id: Optional[uuid.UUID] = None,
+        limit: int = 10,
+    ) -> List[EmergencyListItemResponse]:
+        """Obtiene todas las emergencias activas de la comunidad."""
+        items = await self.repository.list_active_emergencies(community_id=community_id, limit=limit)
+        return [EmergencyListItemResponse(**item) for item in items]
 
     async def get_emergency_detail(self, emergency_id: uuid.UUID) -> EmergencyDetailResponse:
         """Obtiene la ficha completa de una emergencia con sus requerimientos y donaciones."""
@@ -107,7 +120,7 @@ class EmergencyService:
         user_id: uuid.UUID,
         data: EmergencyCreate,
     ) -> EmergencyDetailResponse:
-        """Reporta una nueva emergencia vecinal e inicializa necesidades base."""
+        """Reporta una nueva emergencia vecinal, siembra necesidades y envía alertas a la comunidad."""
         community_id = data.community_id
         if not community_id:
             community_id = await self.repository.get_first_active_community_id()
@@ -139,8 +152,43 @@ class EmergencyService:
                 unit=r_unit,
             )
 
+        # Emitir notificaciones de alerta inmediata a los vecinos de la comunidad
+        try:
+            await self.notif_repository.broadcast_alert_to_community(
+                alert_id=emg.id,
+                title=emg.title,
+                message=emg.description or "Se ha activado una alerta en tu manzana.",
+                sender_id=user_id,
+            )
+        except Exception:
+            pass
+
         await self.session.commit()
         return await self.get_emergency_detail(emg.id)
+
+    async def broadcast_alert(
+        self,
+        emergency_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> dict:
+        """Dispara manualmente el envío de notificaciones a toda la comunidad vecinal."""
+        emg = await self.repository.get_emergency_by_id(emergency_id)
+        if not emg:
+            raise EntityNotFoundException("Emergencia", emergency_id)
+
+        count = await self.notif_repository.broadcast_alert_to_community(
+            alert_id=emg.id,
+            title=emg.title,
+            message=emg.description or "Alerta vecinal activa en tu zona.",
+            sender_id=user_id,
+        )
+        await self.session.commit()
+        return {
+            "status": "success",
+            "message": f"Alerta vecinal enviada con éxito a {count} vecinos de la comunidad.",
+            "emergency_id": emergency_id,
+            "notifications_sent": count,
+        }
 
     async def update_status(
         self,
@@ -209,25 +257,53 @@ class EmergencyService:
             committed_at=contrib.committed_at,
         )
 
-    async def register_volunteer(
-        self,
-        emergency_id: uuid.UUID,
-        user_id: uuid.UUID,
-        data: VolunteerRegister,
-    ) -> dict:
-        """Registra a un vecino como voluntario en camino para atender la emergencia."""
+    
+    async def delete_emergency(self, emergency_id: uuid.UUID, user_id: uuid.UUID) -> dict:
+        """Elimina la emergencia si el usuario es quien la reportó o dev."""
         emg = await self.repository.get_emergency_by_id(emergency_id)
         if not emg:
             raise EntityNotFoundException("Emergencia", emergency_id)
 
-        # Si el estado es solo 'reportada', pasar a 'en_atencion' automáticamente
-        if emg.status == "reportada":
-            await self.repository.update_status(emg, "en_atencion")
-            await self.session.commit()
+        dev_uid = uuid.UUID("a0000000-0000-0000-0000-000000000001")
+        if emg.reported_by != user_id and user_id != dev_uid:
+            raise ValidationException("Solo el vecino que reportó la alerta puede eliminarla.")
 
-        return {
-            "status": "success",
-            "message": "Te has registrado como voluntario en camino para esta emergencia.",
-            "emergency_id": emergency_id,
-            "volunteer_id": user_id,
-        }
+        await self.repository.delete_emergency(emergency_id)
+        return {"success": True, "message": "Alerta eliminada correctamente."}
+
+    async def get_emergency_volunteers(self, emergency_id: Optional[uuid.UUID] = None) -> List[VolunteerResponse]:
+        """Retorna todos los brigadistas registrados persistentes para esta emergencia."""
+        db_volunteers = await self.repository.list_volunteers(emergency_id)
+        return [VolunteerResponse(**v) for v in db_volunteers]
+
+    async def register_volunteer(
+        self,
+        emergency_id: Optional[uuid.UUID],
+        user_id: uuid.UUID,
+        data: VolunteerRegister,
+    ) -> List[VolunteerResponse]:
+        """Registra a un vecino real en la brigada de guardia con distancia en metros."""
+        # Obtener datos del perfil del usuario si no fueron enviados
+        from app.modules.users.models import Profile
+        stmt = select(Profile).where(Profile.id == user_id)
+        res = await self.session.execute(stmt)
+        profile = res.scalar_one_or_none()
+        
+        vol_name = data.name or (profile.full_name if profile else "Vecino Solidario")
+        vol_skill = data.skill or (profile.skill if (profile and profile.skill) else "Apoyo Comunitario")
+        vol_avatar = data.avatar or (profile.avatar_url if (profile and profile.avatar_url and len(profile.avatar_url) <= 10) else "👤")
+        dist = data.distance_m if data.distance_m is not None else 45
+
+        # Guardar en base de datos
+        await self.repository.add_volunteer(
+            emergency_id=emergency_id,
+            user_id=user_id,
+            name=vol_name,
+            skill=vol_skill,
+            avatar=vol_avatar,
+            distance_m=dist,
+            status=data.status or "En camino"
+        )
+        
+        return await self.get_emergency_volunteers(emergency_id)
+
