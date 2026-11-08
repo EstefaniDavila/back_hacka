@@ -20,7 +20,6 @@ class AuthUser(Base):
 class Profile(Base):
     """Modelo de persistencia para la tabla `profiles`."""
     __tablename__ = "profiles"
- 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('auth.users.id'), primary_key=True)
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
