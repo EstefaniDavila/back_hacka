@@ -63,11 +63,7 @@ class ChatRepository:
             last_msg_res = await self.session.execute(last_msg_stmt)
             last_msg = last_msg_res.scalar_one_or_none()
 
-            display_title = conv.title
-            if not display_title and other_user:
-                display_title = other_user.full_name
-            elif not display_title:
-                display_title = "Chat Comunitario"
+            display_title = (other_user.full_name if other_user and other_user.full_name else conv.title) or "Chat Comunitario"
 
             results.append({
                 "id": conv.id,
@@ -181,7 +177,7 @@ class ChatRepository:
                 ChatMessage.text,
                 ChatMessage.created_at,
             )
-            .join(Profile, Profile.id == ChatMessage.sender_id)
+            .outerjoin(Profile, Profile.id == ChatMessage.sender_id)
             .where(ChatMessage.conversation_id == conversation_id)
             .order_by(ChatMessage.created_at.asc())
             .limit(limit)
@@ -190,7 +186,9 @@ class ChatRepository:
         items = []
         for row in res.mappings().all():
             row_dict = dict(row)
-            row_dict["time"] = row_dict["created_at"].strftime("%H:%M") if row_dict["created_at"] else "Ahora"
+            if not row_dict.get("sender_name"):
+                row_dict["sender_name"] = "Vecino"
+            row_dict["time"] = row_dict["created_at"].strftime("%H:%M") if row_dict.get("created_at") else "Ahora"
             items.append(row_dict)
         return items
 

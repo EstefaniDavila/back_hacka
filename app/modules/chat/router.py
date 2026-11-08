@@ -51,12 +51,13 @@ async def create_chat(
     summary="Obtener detalle de la conversación con historial completo",
 )
 async def get_chat_detail(
-    conversation_id: uuid.UUID,
+    conversation_id: str,
     current_user: CurrentUser = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     """Retorna el historial completo de mensajes para no perder el contexto al salir del chat."""
-    return await service.get_conversation_detail(conversation_id, current_user.id)
+    resolved_id = await service.resolve_conversation_id(conversation_id, current_user.id)
+    return await service.get_conversation_detail(resolved_id, current_user.id)
 
 
 @router.get(
@@ -65,12 +66,13 @@ async def get_chat_detail(
     summary="Listar mensajes de una conversación",
 )
 async def list_messages(
-    conversation_id: uuid.UUID,
+    conversation_id: str,
     current_user: CurrentUser = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     """Consulta la lista de mensajes persistidos de esta conversación."""
-    detail = await service.get_conversation_detail(conversation_id, current_user.id)
+    resolved_id = await service.resolve_conversation_id(conversation_id, current_user.id)
+    detail = await service.get_conversation_detail(resolved_id, current_user.id)
     return detail.messages
 
 
@@ -81,14 +83,15 @@ async def list_messages(
     summary="Enviar mensaje a la conversación",
 )
 async def send_message(
-    conversation_id: uuid.UUID,
+    conversation_id: str,
     data: ChatMessageCreate,
     current_user: CurrentUser = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
 ):
     """Persiste y envía un mensaje al chat comunitario."""
+    resolved_id = await service.resolve_conversation_id(conversation_id, current_user.id)
     return await service.send_message(
-        conversation_id=conversation_id,
+        conversation_id=resolved_id,
         sender_id=current_user.id,
         data=data,
     )

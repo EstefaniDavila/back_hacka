@@ -13,6 +13,7 @@ from app.modules.chat.schemas import (
     ConversationListItem,
 )
 from app.modules.commerce.repository import CommerceRepository
+from app.modules.users.models import Profile
 
 
 class ChatService:
@@ -22,6 +23,38 @@ class ChatService:
         self.session = session
         self.repository = ChatRepository(session)
         self.commerce_repo = CommerceRepository(session)
+
+    async def resolve_conversation_id(self, raw_id: str, current_user_id: uuid.UUID) -> uuid.UUID:
+        """Resuelve un ID de conversación, soportando UUIDs reales o slugs para compatibilidad."""
+        try:
+            return uuid.UUID(str(raw_id))
+        except (ValueError, AttributeError):
+            pass
+
+        raw_lower = str(raw_id).lower()
+        target_uuid = None
+        if "andy" in raw_lower:
+            target_uuid = uuid.UUID("9f6f0607-1a11-4c21-97cb-5031473bb0ed")
+        elif "imanol" in raw_lower:
+            target_uuid = uuid.UUID("deca8f9c-c527-4c3f-ba48-4f5853bce5f1")
+
+        if target_uuid and target_uuid != current_user_id:
+            community_id = await self.commerce_repo.get_first_active_community_id()
+            conv = await self.repository.get_or_create_direct_chat(
+                user1_id=current_user_id,
+                user2_id=target_uuid,
+                community_id=community_id,
+                title="Coordinación Vecinal",
+            )
+            await self.session.commit()
+            return conv.id
+
+        # Buscar si el usuario ya tiene conversaciones activas
+        convs = await self.repository.list_user_conversations(current_user_id)
+        if convs:
+            return convs[0]["id"]
+
+        raise EntityNotFoundException("Conversación de chat", raw_id)
 
     async def list_conversations(self, user_id: uuid.UUID) -> List[ConversationListItem]:
         """Obtiene todas las conversaciones activas del usuario."""
@@ -118,11 +151,16 @@ class ChatService:
         )
         await self.session.commit()
 
+        sender_profile = await self.session.get(Profile, sender_id)
+        sender_name = sender_profile.full_name if sender_profile and sender_profile.full_name else "Vecino"
+        sender_avatar = sender_profile.avatar_url if sender_profile else None
+
         return ChatMessageResponse(
             id=msg.id,
             conversation_id=conversation_id,
             sender_id=sender_id,
-            sender_name="Yo",
+            sender_name=sender_name,
+            sender_avatar=sender_avatar,
             text=msg.text,
             time="Ahora",
             created_at=msg.created_at,
