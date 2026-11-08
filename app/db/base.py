@@ -33,5 +33,6 @@ def load_all_models():
     import app.modules.emergencies.models  
     import app.modules.interactions.models  
     import app.modules.notifications.models  
+    import app.modules.chat.models
     import app.modules.ai.models  
     import app.modules.sync.models  
