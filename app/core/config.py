@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
+    # Anthropic Claude Vision
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
+
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
     # Supabase Auth

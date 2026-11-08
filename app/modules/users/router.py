@@ -6,6 +6,7 @@ from app.core.logging import logger
 from app.core.security import CurrentUser, get_current_user
 from app.modules.users.dependencies import get_user_service
 from app.modules.users.schemas import (
+    DNIExtractionResponse,
     IdentityVerificationResultResponse,
     ProfileResponse,
     ProfileUpdate,
@@ -48,6 +49,37 @@ async def update_my_profile(
 ):
     """Actualiza datos del perfil como nombre, teléfono o preferencia de tamaño de fuente."""
     return await service.update_profile(current_user.id, profile_update)
+
+
+@router.post(
+    "/extract-dni",
+    response_model=DNIExtractionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Extraer automáticamente datos del DNI con Claude Vision",
+)
+async def extract_dni(
+    dni_front: UploadFile = File(..., description="Foto del anverso del DNI"),
+    dni_back: Optional[UploadFile] = File(None, description="Foto opcional del reverso del DNI"),
+    service: UserService = Depends(get_user_service),
+):
+    """
+    Extrae datos del DNI peruano (DNI, nombres, apellidos, fecha de nacimiento, sexo, ubigeo)
+    usando Claude Vision. Calcula la edad y bloquea a menores de 18 años.
+    No requiere autenticación previa para permitir autollenado durante el onboarding.
+    """
+    front_bytes = await dni_front.read()
+    back_bytes = await dni_back.read() if dni_back else None
+
+    logger.info(
+        "Solicitud de extracción Claude Vision para DNI (anverso: %d bytes, reverso: %s)",
+        len(front_bytes),
+        f"{len(back_bytes)} bytes" if back_bytes else "None",
+    )
+
+    return await service.extract_dni_document(
+        front_bytes=front_bytes,
+        back_bytes=back_bytes,
+    )
 
 
 @router.post(

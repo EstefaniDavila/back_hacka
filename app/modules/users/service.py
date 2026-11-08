@@ -16,6 +16,7 @@ from app.modules.users.repository import (
     UserAddressRepository,
 )
 from app.modules.users.schemas import (
+    DNIExtractionResponse,
     IdentityVerificationCreate,
     IdentityVerificationResultResponse,
     ProfileCreate,
@@ -103,15 +104,22 @@ class UserService:
         """
         profile = await self.get_or_create_profile(user_id, full_name=user_full_name)
 
-        # 1. OCR DNI
+        # 1. OCR DNI con Claude Vision
         try:
-            ocr_result = dni_ocr_service.extract_dni_data(
+            ocr_result = await dni_ocr_service.extract_dni_data(
                 front_bytes=dni_front_bytes,
                 back_bytes=dni_back_bytes,
                 fallback_name=profile.full_name or user_full_name,
             )
         except ValueError as e:
             raise ValidationException(f"Error procesando imagen del DNI: {str(e)}")
+
+        # Validar mayoría de edad en el backend y bloquear a menores de 18 años
+        if ocr_result.underage_blocked:
+            raise ValidationException(
+                ocr_result.error_message
+                or f"Registro bloqueado: El titular tiene {ocr_result.age} años y es menor de edad. VeciRed requiere ser mayor de 18 años."
+            )
 
         # 2. Verificación facial
         try:
@@ -147,7 +155,7 @@ class UserService:
             document_type="DNI",
             document_hash=ocr_result.document_hash,
             document_last4=ocr_result.dni_last4,
-            identity_provider="vecired_ia_ocr",
+            identity_provider="claude_vision_ocr",
             identity_status=identity_status,
             verified_at=now if identity_status == "verified" else None,
             created_at=now,
@@ -216,4 +224,82 @@ class UserService:
             residence_status=residence_status,
             community_id=active_membership.community_id if active_membership else None,
             community_name="Comunidad VeciRed" if active_membership else None,
+        )
+
+    async def extract_dni_document(
+        self,
+        front_bytes: bytes,
+        back_bytes: Optional[bytes] = None,
+    ) -> DNIExtractionResponse:
+        """
+        Extrae datos del DNI con Claude Vision y valida mayoría de edad.
+        Diseñado para prellenar formularios en el onboarding vecinal.
+        """
+        try:
+            ocr_result = await dni_ocr_service.extract_dni_data(
+                front_bytes=front_bytes,
+                back_bytes=back_bytes,
+            )
+        except ValueError as e:
+            raise ValidationException(f"Error procesando imagen del DNI: {str(e)}")
+
+        if ocr_result.underage_blocked:
+            return DNIExtractionResponse(
+                success=False,
+                dni_number=ocr_result.dni_number,
+                dni_last4=ocr_result.dni_last4,
+                full_name=ocr_result.full_name,
+                first_name=ocr_result.first_name,
+                last_name=ocr_result.last_name,
+                birth_date=ocr_result.birth_date,
+                age=ocr_result.age,
+                is_adult=False,
+                underage_blocked=True,
+                gender=ocr_result.gender,
+                ubigeo=ocr_result.ubigeo,
+                unreadable_fields=ocr_result.unreadable_fields,
+                confidence=ocr_result.confidence,
+                api_key_configured=ocr_result.api_key_configured,
+                message=ocr_result.error_message
+                or f"Registro bloqueado: El titular tiene {ocr_result.age} años y es menor de edad.",
+            )
+
+        if not ocr_result.api_key_configured:
+            return DNIExtractionResponse(
+                success=False,
+                is_adult=True,
+                underage_blocked=False,
+                unreadable_fields=ocr_result.unreadable_fields,
+                confidence=0.0,
+                api_key_configured=False,
+                message="ANTHROPIC_API_KEY no está configurada en el backend. Configure la variable en .env para habilitar la extracción con Claude Vision.",
+            )
+
+        success = ocr_result.is_valid_format
+        msg = (
+            "Datos de DNI extraídos exitosamente con Claude Vision."
+            if success
+            else (
+                ocr_result.error_message
+                or "No se pudieron extraer todos los datos requeridos del DNI. Verifique la nitidez de la fotografía."
+            )
+        )
+
+        return DNIExtractionResponse(
+            success=success,
+            dni_number=ocr_result.dni_number,
+            dni_last4=ocr_result.dni_last4,
+            full_name=ocr_result.full_name,
+            first_name=ocr_result.first_name,
+            last_name=ocr_result.last_name,
+            birth_date=ocr_result.birth_date,
+            age=ocr_result.age,
+            is_adult=ocr_result.is_adult,
+            underage_blocked=False,
+            gender=ocr_result.gender,
+            ubigeo=ocr_result.ubigeo,
+            unreadable_fields=ocr_result.unreadable_fields,
+            confidence=ocr_result.confidence,
+            api_key_configured=True,
+            message=msg,
         )

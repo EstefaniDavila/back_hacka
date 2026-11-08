@@ -116,6 +116,26 @@ class IdentityVerificationResultResponse(BaseModel):
     message: str
 
 
+class DNIExtractionResponse(BaseModel):
+    """Respuesta estructurada para extracción de datos de DNI con Claude Vision."""
+    success: bool
+    dni_number: Optional[str] = None
+    dni_last4: Optional[str] = None
+    full_name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    birth_date: Optional[date] = None
+    age: Optional[int] = None
+    is_adult: bool = True
+    underage_blocked: bool = False
+    gender: Optional[str] = None
+    ubigeo: Optional[str] = None
+    unreadable_fields: List[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    api_key_configured: bool = True
+    message: str
+
+
 class VerificationStatusSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
