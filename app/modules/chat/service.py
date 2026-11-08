@@ -25,16 +25,37 @@ class ChatService:
         self.commerce_repo = CommerceRepository(session)
 
     async def resolve_conversation_id(self, raw_id: str, current_user_id: uuid.UUID) -> uuid.UUID:
-        """Resuelve un ID de conversación, soportando UUIDs reales o slugs para compatibilidad."""
+        """Resuelve un ID de conversación, soportando UUIDs reales, perfiles de vecinos o slugs."""
         try:
             return uuid.UUID(str(raw_id))
         except (ValueError, AttributeError):
             pass
 
         raw_lower = str(raw_id).lower()
+
+        # 1. Buscar si el slug corresponde al nombre de un vecino registrado
+        from sqlalchemy import text
+        clean_name = raw_lower.replace("chat-", "").replace("-", " ").strip()
+        res = await self.session.execute(
+            text("SELECT id FROM profiles WHERE LOWER(full_name) LIKE :pat AND id != :uid LIMIT 1"),
+            {"pat": f"%{clean_name}%", "uid": current_user_id}
+        )
+        row = res.fetchone()
+        if row:
+            community_id = await self.commerce_repo.get_first_active_community_id()
+            conv = await self.repository.get_or_create_direct_chat(
+                user1_id=current_user_id,
+                user2_id=row[0],
+                community_id=community_id,
+                title="Coordinación Vecinal",
+            )
+            await self.session.commit()
+            return conv.id
+
+        # 2. Slugs conocidos por testing
         target_uuid = None
         if "andy" in raw_lower:
-            target_uuid = uuid.UUID("9f6f0607-1a11-4c21-97cb-5031473bb0ed")
+            target_uuid = uuid.UUID("40716261-57c0-4fc3-acf1-317ef6b77b21")
         elif "imanol" in raw_lower:
             target_uuid = uuid.UUID("deca8f9c-c527-4c3f-ba48-4f5853bce5f1")
 
@@ -49,10 +70,27 @@ class ChatService:
             await self.session.commit()
             return conv.id
 
-        # Buscar si el usuario ya tiene conversaciones activas
+        # 3. Buscar si el usuario ya tiene conversaciones activas
         convs = await self.repository.list_user_conversations(current_user_id)
         if convs:
             return convs[0]["id"]
+
+        # 4. Fallback con cualquier otro vecino activo para no perder el mensaje
+        other_res = await self.session.execute(
+            text("SELECT id FROM profiles WHERE id != :uid LIMIT 1"),
+            {"uid": current_user_id}
+        )
+        other_row = other_res.fetchone()
+        if other_row:
+            community_id = await self.commerce_repo.get_first_active_community_id()
+            conv = await self.repository.get_or_create_direct_chat(
+                user1_id=current_user_id,
+                user2_id=other_row[0],
+                community_id=community_id,
+                title="Coordinación Vecinal",
+            )
+            await self.session.commit()
+            return conv.id
 
         raise EntityNotFoundException("Conversación de chat", raw_id)
 

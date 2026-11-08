@@ -66,6 +66,19 @@ async def get_active_emergency(
 
 
 @router.get(
+    "/active-all",
+    response_model=List[EmergencyListItemResponse],
+    summary="Listar todas las emergencias activas y recientes de la comunidad",
+)
+async def list_active_emergencies(
+    community_id: Optional[uuid.UUID] = Query(None, description="Filtrar por comunidad"),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Retorna todas las alertas comunitarias reportadas o en atención."""
+    return await service.list_active_emergencies(community_id=community_id)
+
+
+@router.get(
     "/volunteers",
     response_model=List[VolunteerResponse],
     summary="Listar brigada de guardia comunitaria",
@@ -90,7 +103,7 @@ async def join_brigade_direct(
 ):
     """Permite unirse directamente a la brigada de guardia vecinal."""
     return await service.register_volunteer(
-        emergency_id=None,
+        emergency_id=data.emergency_id,
         user_id=current_user.id,
         data=data,
     )

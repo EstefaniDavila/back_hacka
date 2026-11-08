@@ -97,6 +97,7 @@ class EmergencyDetailResponse(EmergencyListItemResponse):
 
 class VolunteerRegister(BaseModel):
     """Payload para sumarse como voluntario ante la emergencia."""
+    emergency_id: Optional[uuid.UUID] = Field(None, description="ID de la emergencia a la que apoya")
     name: Optional[str] = Field(None, max_length=150)
     skill: Optional[str] = Field(None, max_length=100)
     avatar: Optional[str] = Field("👤", max_length=50)
@@ -108,6 +109,7 @@ class VolunteerRegister(BaseModel):
 class VolunteerResponse(BaseModel):
     """Ficha de un voluntario / brigadista vecinal en guardia."""
     id: str
+    emergency_id: Optional[str] = None
     user_id: Optional[str] = None
     name: str
     skill: str

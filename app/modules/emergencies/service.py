@@ -69,6 +69,15 @@ class EmergencyService:
             return None
         return EmergencyListItemResponse(**active)
 
+    async def list_active_emergencies(
+        self,
+        community_id: Optional[uuid.UUID] = None,
+        limit: int = 10,
+    ) -> List[EmergencyListItemResponse]:
+        """Obtiene todas las emergencias activas de la comunidad."""
+        items = await self.repository.list_active_emergencies(community_id=community_id, limit=limit)
+        return [EmergencyListItemResponse(**item) for item in items]
+
     async def get_emergency_detail(self, emergency_id: uuid.UUID) -> EmergencyDetailResponse:
         """Obtiene la ficha completa de una emergencia con sus requerimientos y donaciones."""
         emg = await self.repository.get_emergency_by_id(emergency_id)
@@ -250,28 +259,9 @@ class EmergencyService:
 
     
     async def get_emergency_volunteers(self, emergency_id: Optional[uuid.UUID] = None) -> List[VolunteerResponse]:
-        """Retorna todos los brigadistas registrados persistentes más la guardia base."""
+        """Retorna todos los brigadistas registrados persistentes para esta emergencia."""
         db_volunteers = await self.repository.list_volunteers(emergency_id)
-        
-        # Brigada base comunitaria
-        base_guard = [
-            {"id": "base-1", "user_id": None, "name": "Martha Quispe", "skill": "Primeros Auxilios / Enfermería", "avatar": "👵", "distance": "50m", "distance_m": 50, "status": "En guardia"},
-            {"id": "base-2", "user_id": None, "name": "Carlos Ramos", "skill": "Electricidad y Gasfitería", "avatar": "👨‍🔧", "distance": "120m", "distance_m": 120, "status": "Disponible"},
-            {"id": "base-3", "user_id": None, "name": "Lucía Mendoza", "skill": "Apoyo Logístico / Agua", "avatar": "👩", "distance": "180m", "distance_m": 180, "status": "En guardia"},
-        ]
-        
-        # Priorizar voluntarios registrados reales
-        seen_names = set()
-        final_list = []
-        for v in db_volunteers:
-            seen_names.add(v["name"])
-            final_list.append(VolunteerResponse(**v))
-            
-        for bg in base_guard:
-            if bg["name"] not in seen_names:
-                final_list.append(VolunteerResponse(**bg))
-                
-        return final_list
+        return [VolunteerResponse(**v) for v in db_volunteers]
 
     async def register_volunteer(
         self,

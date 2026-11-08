@@ -105,6 +105,49 @@ class EmergencyRepository:
 
         return items, total
 
+    async def list_active_emergencies(self, community_id: Optional[uuid.UUID] = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """Retorna todas las emergencias activas de la comunidad en orden cronológico."""
+        stmt = (
+            select(
+                Emergency.id,
+                Emergency.reported_by,
+                Profile.full_name.label("reporter_name"),
+                Profile.avatar_url.label("reporter_avatar"),
+                Emergency.community_id,
+                Community.name.label("community_name"),
+                Emergency.emergency_type,
+                Emergency.title,
+                Emergency.description,
+                Emergency.severity,
+                Emergency.status,
+                Emergency.occurred_at,
+                Emergency.created_at,
+            )
+            .outerjoin(Profile, Profile.id == Emergency.reported_by)
+            .outerjoin(Community, Community.id == Emergency.community_id)
+            .where(Emergency.status.in_(["en_atencion", "reportada"]))
+        )
+        if community_id:
+            stmt = stmt.where(Emergency.community_id == community_id)
+
+        stmt = stmt.order_by(
+            desc(Emergency.severity == "critical"),
+            desc(Emergency.created_at),
+        ).limit(limit)
+
+        res = await self.session.execute(stmt)
+        items = []
+        for row in res.mappings().all():
+            d = dict(row)
+            if not d.get("reporter_name"):
+                d["reporter_name"] = "Vecino de la zona"
+            if not d.get("community_name"):
+                d["community_name"] = "Zona A"
+            d["volunteers_count"] = 0
+            d["radius_m"] = 500
+            items.append(d)
+        return items
+
     async def get_active_emergency(self, community_id: Optional[uuid.UUID] = None) -> Optional[Dict[str, Any]]:
         """
         Retorna la emergencia activa más prioritaria para el banner de la aplicación.
@@ -302,14 +345,23 @@ class EmergencyRepository:
     # GESTIÓN DE VOLUNTARIOS Y BRIGADA VECINAL
     # ------------------------------------------------------------------
     async def list_volunteers(self, emergency_id: Optional[uuid.UUID] = None) -> List[Dict[str, Any]]:
-        """Lista los voluntarios registrados para una emergencia o general."""
+        """Lista los voluntarios registrados para una emergencia específica o general."""
         from sqlalchemy import text
-        stmt = text("""
-            SELECT id, emergency_id, user_id, name, skill, avatar, distance_m, status, created_at
-            FROM emergency_volunteers
-            ORDER BY created_at DESC
-        """)
-        res = await self.session.execute(stmt)
+        if emergency_id:
+            stmt = text("""
+                SELECT id, emergency_id, user_id, name, skill, avatar, distance_m, status, created_at
+                FROM emergency_volunteers
+                WHERE emergency_id = :eid
+                ORDER BY created_at DESC
+            """)
+            res = await self.session.execute(stmt, {"eid": emergency_id})
+        else:
+            stmt = text("""
+                SELECT id, emergency_id, user_id, name, skill, avatar, distance_m, status, created_at
+                FROM emergency_volunteers
+                ORDER BY created_at DESC
+            """)
+            res = await self.session.execute(stmt)
         rows = res.fetchall()
         result = []
         for r in rows:
@@ -345,19 +397,33 @@ class EmergencyRepository:
         dev_uid = uuid.UUID("a0000000-0000-0000-0000-000000000001")
         clean_name = name.strip() if name else "Vecino Solidario"
 
-        # Eliminar registro previo de este vecino para evitar duplicados (por nombre y/o uid real)
-        if user_id == dev_uid:
-            await self.session.execute(
-                text("DELETE FROM emergency_volunteers WHERE LOWER(name) = LOWER(:name)"),
-                {"name": clean_name}
-            )
-            assigned_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, clean_name.lower())
+        # Eliminar registro previo de este vecino para evitar duplicados dentro de ESTA misma emergencia
+        if emergency_id:
+            if user_id == dev_uid:
+                await self.session.execute(
+                    text("DELETE FROM emergency_volunteers WHERE emergency_id = :eid AND LOWER(name) = LOWER(:name)"),
+                    {"eid": emergency_id, "name": clean_name}
+                )
+                assigned_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, clean_name.lower())
+            else:
+                await self.session.execute(
+                    text("DELETE FROM emergency_volunteers WHERE emergency_id = :eid AND (user_id = :uid OR LOWER(name) = LOWER(:name))"),
+                    {"eid": emergency_id, "uid": user_id, "name": clean_name}
+                )
+                assigned_user_id = user_id
         else:
-            await self.session.execute(
-                text("DELETE FROM emergency_volunteers WHERE user_id = :uid OR LOWER(name) = LOWER(:name)"),
-                {"uid": user_id, "name": clean_name}
-            )
-            assigned_user_id = user_id
+            if user_id == dev_uid:
+                await self.session.execute(
+                    text("DELETE FROM emergency_volunteers WHERE LOWER(name) = LOWER(:name)"),
+                    {"name": clean_name}
+                )
+                assigned_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, clean_name.lower())
+            else:
+                await self.session.execute(
+                    text("DELETE FROM emergency_volunteers WHERE user_id = :uid OR LOWER(name) = LOWER(:name)"),
+                    {"uid": user_id, "name": clean_name}
+                )
+                assigned_user_id = user_id
 
         await self.session.execute(
             text("""

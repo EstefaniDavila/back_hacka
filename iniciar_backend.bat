@@ -4,11 +4,23 @@ echo ===================================================
 echo      INICIANDO BACKEND VECIRED IA (FASTAPI)
 echo ===================================================
 cd /d "%~dp0"
-call .venv\Scripts\activate.bat
+
+if not exist .venv (
+    echo [1/2] Creando entorno virtual de Python (.venv)...
+    python -m venv .venv
+    call .venv\Scripts\activate.bat
+    echo [2/2] Instalando librerias requeridas...
+    pip install -r requirements.txt
+) else (
+    call .venv\Scripts\activate.bat
+)
+
+echo.
+echo ===================================================
 echo Servidor backend disponible en:
 echo   - Local:     http://localhost:8000
 echo   - Swagger:   http://localhost:8000/docs
-echo   - Red local: http://192.168.1.33:8000
+echo ===================================================
 echo.
 echo Presiona Ctrl + C para detener el servidor.
 echo.
