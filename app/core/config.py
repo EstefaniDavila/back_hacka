@@ -27,11 +27,11 @@ class Settings(BaseSettings):
 
     # Supabase Auth
     SUPABASE_URL: str = "https://gipoemmdfoxbcrsjtkrj.supabase.co"
-    SUPABASE_KEY: str = ""
+    SUPABASE_KEY: str = "sb_publishable_H2kWqBvErmTNpdjYr3xNZA_eMzm747u"
     SUPABASE_JWT_SECRET: str = ""
 
     # PostgreSQL / Supabase
-    DATABASE_URL: str = ""
+    DATABASE_URL: str = "postgresql+asyncpg://postgres.gipoemmdfoxbcrsjtkrj:VeCined910Re@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
