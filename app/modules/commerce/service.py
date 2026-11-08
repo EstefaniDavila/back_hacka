@@ -141,6 +141,7 @@ class CommerceService:
             if not category:
                 raise EntityNotFoundException("Categoría de servicio", data.category_id)
 
+        cat_id = data.category_id if data.category_id is not None else service.category_id
         await self.repository.update_service(
             service=service,
             title=data.title,
@@ -354,6 +355,11 @@ class CommerceService:
             biz = await self.repository.get_or_create_user_business(owner_id=user_id, community_id=community_id)
             business_id = biz.id
 
+        cat_id = data.category_id
+        if not cat_id:
+            all_cats = await self.repository.list_product_categories()
+            if all_cats:
+                cat_id = all_cats[0].id if hasattr(all_cats[0], 'id') else all_cats[0]['id']
         prod = await self.repository.create_product(
             name=data.name,
             price=data.price,
@@ -377,6 +383,7 @@ class CommerceService:
         if not prod:
             raise EntityNotFoundException("Producto", product_id)
 
+        cat_id = data.category_id if data.category_id is not None else prod.category_id
         await self.repository.update_product(
             product=prod,
             name=data.name,
