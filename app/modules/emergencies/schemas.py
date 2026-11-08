@@ -53,8 +53,8 @@ class EmergencyContributionResponse(BaseModel):
 # ----------------------------------------------------------------------
 class EmergencyCreate(BaseModel):
     """Payload para reportar una emergencia en el barrio."""
-    emergency_type: str = Field(..., min_length=3, max_length=50, description="Tipo: inundacion, incendio, sismo, seguridad, medica, otro")
-    title: str = Field(..., min_length=5, max_length=150, description="Título breve (ej: Inundación en Mz 2)")
+    emergency_type: str = Field("seguridad", min_length=2, max_length=50, description="Tipo: inundacion, incendio, sismo, seguridad, medica, otro")
+    title: str = Field(..., min_length=3, max_length=150, description="Título breve (ej: Inundación en Mz 2)")
     description: Optional[str] = Field(None, max_length=2000, description="Detalle de lo ocurrido y requerimientos urgentes")
     severity: str = Field("high", pattern="^(low|medium|high|critical)$", description="Nivel de severidad")
     community_id: Optional[uuid.UUID] = Field(None, description="ID de la comunidad vecinal")

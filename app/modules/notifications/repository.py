@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from sqlalchemy import desc, func, select, update
+from sqlalchemy import desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.emergencies.models import AlertDelivery, EmergencyAlert
@@ -68,6 +68,15 @@ class NotificationRepository:
         """Crea registros de entrega y notificaciones para todos los vecinos registrados."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
+        # Buscar el ID real de EmergencyAlert si alert_id vino de Emergency
+        real_alert_id = None
+        if alert_id:
+            alert_stmt = select(EmergencyAlert.id).where(
+                or_(EmergencyAlert.id == alert_id, EmergencyAlert.emergency_id == alert_id)
+            ).limit(1)
+            alert_res = await self.session.execute(alert_stmt)
+            real_alert_id = alert_res.scalar_one_or_none()
+
         # Obtener todos los perfiles de vecinos excepto el emisor
         stmt = select(Profile.id).where(Profile.id != sender_id)
         res = await self.session.execute(stmt)
@@ -90,14 +99,15 @@ class NotificationRepository:
             notifications_to_add.append(notif)
 
             # 2. Registro de entrega de alerta
-            delivery = AlertDelivery(
-                id=uuid.uuid4(),
-                alert_id=alert_id,
-                user_id=uid,
-                delivery_status="sent",
-                sent_at=now,
-            )
-            deliveries_to_add.append(delivery)
+            if real_alert_id:
+                delivery = AlertDelivery(
+                    id=uuid.uuid4(),
+                    alert_id=real_alert_id,
+                    user_id=uid,
+                    delivery_status="sent",
+                    sent_at=now,
+                )
+                deliveries_to_add.append(delivery)
 
         if notifications_to_add:
             self.session.add_all(notifications_to_add)

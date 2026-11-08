@@ -66,15 +66,15 @@ class EmergencyRepository:
                 Emergency.created_at,
                 func.coalesce(needs_count_subq.c.needs_count, 0).label("needs_count"),
             )
-            .join(Profile, Profile.id == Emergency.reported_by)
-            .join(Community, Community.id == Emergency.community_id)
+            .outerjoin(Profile, Profile.id == Emergency.reported_by)
+            .outerjoin(Community, Community.id == Emergency.community_id)
             .outerjoin(needs_count_subq, needs_count_subq.c.emergency_id == Emergency.id)
         )
 
         count_stmt = (
             select(func.count(Emergency.id))
-            .join(Profile, Profile.id == Emergency.reported_by)
-            .join(Community, Community.id == Emergency.community_id)
+            .outerjoin(Profile, Profile.id == Emergency.reported_by)
+            .outerjoin(Community, Community.id == Emergency.community_id)
         )
 
         conditions = []
@@ -125,8 +125,8 @@ class EmergencyRepository:
                 Emergency.occurred_at,
                 Emergency.created_at,
             )
-            .join(Profile, Profile.id == Emergency.reported_by)
-            .join(Community, Community.id == Emergency.community_id)
+            .outerjoin(Profile, Profile.id == Emergency.reported_by)
+            .outerjoin(Community, Community.id == Emergency.community_id)
             .where(Emergency.status.in_(["en_atencion", "reportada"]))
         )
         if community_id:
@@ -144,6 +144,10 @@ class EmergencyRepository:
             return None
 
         result = dict(row)
+        if not result.get("reporter_name"):
+            result["reporter_name"] = "Vecino de la zona"
+        if not result.get("community_name"):
+            result["community_name"] = "Zona A"
         result["volunteers_count"] = 4
         result["radius_m"] = 500
         result["needs_count"] = 0
