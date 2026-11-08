@@ -67,7 +67,7 @@ app.include_router(notifications_router, prefix=settings.API_V1_STR)
 app.include_router(reviews_router, prefix=settings.API_V1_STR)
 app.include_router(search_router, prefix=settings.API_V1_STR)
 
-
+ 
 @app.get("/", tags=["Root"])
 async def root():
     """Ruta raíz de bienvenida e información de la API."""
