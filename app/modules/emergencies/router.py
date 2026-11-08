@@ -23,6 +23,22 @@ from app.shared.pagination import PaginatedResponse
 router = APIRouter(prefix="/emergencies", tags=["Emergencias Barriales"])
 
 
+@router.delete(
+    "/{emergency_id}",
+    summary="Eliminar alerta de emergencia (Solo el creador)",
+)
+async def delete_emergency(
+    emergency_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Permite al vecino que reportó la alerta eliminarla de la comunidad."""
+    return await service.delete_emergency(
+        emergency_id=emergency_id,
+        user_id=current_user.id,
+    )
+
+
 # -------------------------------------------------------------
 # EMERGENCIAS: LISTADO Y CONSULTA
 # -------------------------------------------------------------

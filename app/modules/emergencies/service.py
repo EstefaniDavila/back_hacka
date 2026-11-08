@@ -258,6 +258,19 @@ class EmergencyService:
         )
 
     
+    async def delete_emergency(self, emergency_id: uuid.UUID, user_id: uuid.UUID) -> dict:
+        """Elimina la emergencia si el usuario es quien la reportó o dev."""
+        emg = await self.repository.get_emergency_by_id(emergency_id)
+        if not emg:
+            raise EntityNotFoundException("Emergencia", emergency_id)
+
+        dev_uid = uuid.UUID("a0000000-0000-0000-0000-000000000001")
+        if emg.reported_by != user_id and user_id != dev_uid:
+            raise ValidationException("Solo el vecino que reportó la alerta puede eliminarla.")
+
+        await self.repository.delete_emergency(emergency_id)
+        return {"success": True, "message": "Alerta eliminada correctamente."}
+
     async def get_emergency_volunteers(self, emergency_id: Optional[uuid.UUID] = None) -> List[VolunteerResponse]:
         """Retorna todos los brigadistas registrados persistentes para esta emergencia."""
         db_volunteers = await self.repository.list_volunteers(emergency_id)

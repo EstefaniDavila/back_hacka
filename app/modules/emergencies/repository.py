@@ -341,6 +341,19 @@ class EmergencyRepository:
         res = await self.session.execute(stmt)
         return [dict(r) for r in res.mappings().all()]
 
+    async def delete_emergency(self, emergency_id: uuid.UUID) -> bool:
+        """Elimina una emergencia y sus registros asociados."""
+        from sqlalchemy import text
+        await self.session.execute(text("DELETE FROM emergency_volunteers WHERE emergency_id = :eid"), {"eid": emergency_id})
+        await self.session.execute(text("DELETE FROM emergency_contributions WHERE need_id IN (SELECT id FROM emergency_needs WHERE emergency_id = :eid)"), {"eid": emergency_id})
+        await self.session.execute(text("DELETE FROM emergency_needs WHERE emergency_id = :eid"), {"eid": emergency_id})
+        await self.session.execute(text("DELETE FROM emergency_alerts WHERE emergency_id = :eid"), {"eid": emergency_id})
+        await self.session.execute(text("DELETE FROM collection_points WHERE emergency_id = :eid"), {"eid": emergency_id})
+        await self.session.execute(text("DELETE FROM vulnerability_reports WHERE emergency_id = :eid"), {"eid": emergency_id})
+        res = await self.session.execute(text("DELETE FROM emergencies WHERE id = :eid"), {"eid": emergency_id})
+        await self.session.commit()
+        return res.rowcount > 0
+
     # ------------------------------------------------------------------
     # GESTIÓN DE VOLUNTARIOS Y BRIGADA VECINAL
     # ------------------------------------------------------------------
