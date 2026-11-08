@@ -215,3 +215,4 @@ class PaginatedEmergenciesSearch(BaseModel):
     meta: SearchPaginationMeta
     location_applied: Optional[SearchLocationMeta] = None
     sort_applied: str = "recommended"
+

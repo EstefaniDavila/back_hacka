@@ -24,8 +24,8 @@ class TimestampMixin:
     )
 
 
-# Importar modelos de módulos para que Base.metadata reconozca todas las tablas
-def _load_all_models():
+# Carga diferida de modelos para que Base.metadata reconozca todas las tablas cuando sea necesario
+def load_all_models():
     import app.modules.geo.models  
     import app.modules.users.models  
     import app.modules.commerce.models  
@@ -36,5 +36,3 @@ def _load_all_models():
     import app.modules.ai.models  
     import app.modules.sync.models  
 
-
-_load_all_models()

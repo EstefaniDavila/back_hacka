@@ -534,3 +534,4 @@ class SearchRepository:
             })
 
         return candidates
+

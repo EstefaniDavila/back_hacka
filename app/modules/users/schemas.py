@@ -147,3 +147,62 @@ class VerificationStatusSummaryResponse(BaseModel):
     community_id: Optional[uuid.UUID] = None
     community_name: Optional[str] = None
 
+
+class StartDniVerificationResponse(BaseModel):
+    """Respuesta para el Paso 1 de onboarding: OCR de DNI y apertura de sesión temporal."""
+    success: bool
+    stage: str = "dni_verified"
+    session_id: Optional[str] = None
+    verification_token: Optional[str] = None
+    extracted_data: Optional[DNIExtractionResponse] = None
+    underage_blocked: bool = False
+    message: str
+
+
+class VerifyFaceSessionResponse(BaseModel):
+    """Respuesta para el Paso 2 de onboarding: Verificación facial contra el DNI con InsightFace."""
+    success: bool
+    stage: str = "face_verified"
+    session_id: Optional[str] = None
+    verification_token: Optional[str] = None
+    is_match: bool
+    confidence_score: float
+    liveness_passed: bool
+    message: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CompleteRegistrationRequest(BaseModel):
+    """Cuerpo de solicitud para el Paso 6: Confirmación y registro definitivo."""
+    verification_token: str = Field(..., description="Token JWT firmado emitido tras aprobar el Paso 2 de biometría")
+    department: Optional[str] = Field("Lima", max_length=100)
+    province: Optional[str] = Field("Lima", max_length=100)
+    district: str = Field(..., max_length=100)
+    community_name: Optional[str] = Field("Comunidad VeciRed", max_length=150)
+    zone_name: Optional[str] = Field(None, max_length=100)
+    block_code: Optional[str] = Field(None, max_length=30)
+    street_address: str = Field(..., max_length=200)
+    lot_number: Optional[str] = Field(None, max_length=30)
+    reference: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    full_name: Optional[str] = Field(None, max_length=150)
+    phone: Optional[str] = Field(None, max_length=20)
+    avatar_url: Optional[str] = None
+    occupation: Optional[str] = Field(None, max_length=80, description="Oficio o habilidad vecinal")
+    skill: Optional[str] = Field(None, max_length=80, description="Habilidad vecinal complementaria")
+
+
+class CompleteRegistrationResponse(BaseModel):
+    """Respuesta del registro definitivo una vez persistidas todas las relaciones."""
+    model_config = ConfigDict(from_attributes=True)
+
+    success: bool
+    user_id: uuid.UUID
+    account_status: str = "verified"
+    profile: ProfileResponse
+    community_name: Optional[str] = None
+    address: Optional[str] = None
+    message: str
+
+

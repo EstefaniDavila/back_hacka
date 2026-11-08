@@ -11,3 +11,4 @@ def get_search_service(
 ) -> SearchService:
     """Provee una instancia de SearchService con la sesión de base de datos inyectada."""
     return SearchService(session)
+

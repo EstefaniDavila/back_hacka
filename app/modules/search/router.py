@@ -207,3 +207,4 @@ async def search_emergencies(
         page=page,
         page_size=page_size,
     )
+

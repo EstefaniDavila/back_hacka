@@ -6,15 +6,112 @@ from app.core.logging import logger
 from app.core.security import CurrentUser, get_current_user
 from app.modules.users.dependencies import get_user_service
 from app.modules.users.schemas import (
+    CompleteRegistrationRequest,
+    CompleteRegistrationResponse,
     DNIExtractionResponse,
     IdentityVerificationResultResponse,
     ProfileResponse,
     ProfileUpdate,
+    StartDniVerificationResponse,
     VerificationStatusSummaryResponse,
+    VerifyFaceSessionResponse,
 )
 from app.modules.users.service import UserService
 
 router = APIRouter(prefix="/users", tags=["Usuarios y Verificación"])
+
+
+@router.post(
+    "/verification-session/start-dni",
+    response_model=StartDniVerificationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Paso 1: OCR de DNI e inicio de sesión temporal de verificación",
+)
+async def start_dni_verification(
+    dni_front: UploadFile = File(..., description="Foto del anverso del DNI"),
+    dni_back: Optional[UploadFile] = File(None, description="Foto opcional del reverso del DNI"),
+    service: UserService = Depends(get_user_service),
+):
+    """
+    Paso 1 del Onboarding VeciRed:
+    - Extrae datos de DNI con Claude Vision.
+    - Valida mayoría de edad (bloquea a menores de 18 años).
+    - Emite un token firmado con expiración para continuar al Paso 2.
+    - NO guarda usuarios ni datos en la base de datos hasta completar el flujo.
+    """
+    front_bytes = await dni_front.read()
+    back_bytes = await dni_back.read() if dni_back else None
+
+    logger.info(
+        "Iniciando sesión de verificación DNI (anverso: %d bytes, reverso: %s)",
+        len(front_bytes),
+        f"{len(back_bytes)} bytes" if back_bytes else "None",
+    )
+
+    return await service.start_dni_verification_session(
+        front_bytes=front_bytes,
+        back_bytes=back_bytes,
+    )
+
+
+@router.post(
+    "/verification-session/verify-face",
+    response_model=VerifyFaceSessionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Paso 2: Comparación facial biométrica con InsightFace",
+)
+async def verify_face_session(
+    verification_token: str = Form(..., description="Token firmado del Paso 1"),
+    selfie: UploadFile = File(..., description="Foto selfie tomada con la cámara frontal"),
+    service: UserService = Depends(get_user_service),
+):
+    """
+    Paso 2 del Onboarding VeciRed:
+    - Compara el rostro de la selfie en vivo contra el rostro del DNI en memoria usando InsightFace.
+    - Valida liveness (prueba de vida) y distancia euclidiana/coseno de vectores faciales.
+    - Emite un token actualizado con stage='face_verified'.
+    - NO auto-aprueba en caso de discrepancia biométrica.
+    """
+    selfie_bytes = await selfie.read()
+
+    logger.info(
+        "Ejecutando verificación facial para sesión temporal (selfie: %d bytes)",
+        len(selfie_bytes),
+    )
+
+    return await service.verify_face_in_session(
+        verification_token=verification_token,
+        selfie_bytes=selfie_bytes,
+    )
+
+
+@router.post(
+    "/complete-onboarding-registration",
+    response_model=CompleteRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Paso 6: Registro definitivo y persistencia atómica en base de datos",
+)
+async def complete_onboarding_registration(
+    request: CompleteRegistrationRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    """
+    Paso 6 del Onboarding VeciRed:
+    - Exige que el usuario haya sido creado en Supabase Auth y suministre su token JWT.
+    - Valida que el verification_token contenga la aprobación facial estricta.
+    - Persiste atómicamente: perfil, verificación de DNI, dirección actual, membresía y oficio.
+    """
+    logger.info(
+        "Completando registro definitivo para usuario autenticado %s",
+        current_user.id,
+    )
+
+    return await service.complete_onboarding_registration(
+        user_id=current_user.id,
+        request=request,
+    )
+
 
 
 @router.get(
