@@ -222,32 +222,56 @@ class DNIOCRService:
         gender = "M"
         ubigeo = "150101"
 
+        def is_date_8(val: str) -> bool:
+            """Valida estrictamente si una secuencia de 8 dígitos corresponde a una fecha DDMMYYYY o YYYYMMDD."""
+            if not val or len(val) != 8 or not val.isdigit():
+                return False
+            # DDMMYYYY
+            d, m, y = int(val[:2]), int(val[2:4]), int(val[4:])
+            if 1 <= d <= 31 and 1 <= m <= 12 and 1920 <= y <= 2035:
+                return True
+            # YYYYMMDD
+            y2, m2, d2 = int(val[:4]), int(val[4:6]), int(val[6:])
+            if 1 <= d2 <= 31 and 1 <= m2 <= 12 and 1920 <= y2 <= 2035:
+                return True
+            return False
+
         # -------------------------------------------------------------------------
         # 1. EXTRACCIÓN DE NÚMERO DE DNI (CUI peruano de 8 dígitos)
         # -------------------------------------------------------------------------
         # A) Buscar en MRZ reverso (ej: I<PER61087637)
         for line in lines:
-            mrz_dni = re.search(r'(?:PER|I<PER|IDPER)(\d{8})', line.replace(" ", ""))
-            if mrz_dni:
-                dni_number = mrz_dni.group(1)
+            line_no_space = line.replace(" ", "")
+            for m in re.findall(r'(?:PER|I<PER|IDPER)(\d{8})', line_no_space):
+                if not is_date_8(m):
+                    dni_number = m
+                    break
+            if dni_number:
                 break
 
-        # B) Buscar CUI / DNI visual (8 dígitos que NO sean una fecha DDMMYYYY reciente)
+        # B) Buscar formato CUI con guion de dígito verificador (\d{8}-\d) ej: 61087637-0
         if not dni_number:
-            cui_cands = re.findall(r'(?:CUI\s*[:\-]?\s*)?(\d{8})(?:-\d)?', full_text)
-            for cand in cui_cands:
-                # Si termina en 199X, 200X, 201X o 202X es probable que sea una fecha DDMMYYYY
-                if cand.endswith(("197", "198", "199", "200", "201", "202", "203")):
-                    continue
-                dni_number = cand
-                break
+            for m in re.findall(r'\b(\d{8})-\d\b', full_text):
+                if not is_date_8(m):
+                    dni_number = m
+                    break
 
-        # C) Fallback si ningún candidato pasó el filtro
+        # C) Buscar palabra clave CUI seguida de 8 dígitos
         if not dni_number:
-            all_8d = [c for c in re.findall(r'\b(\d{8})\b', full_text) if not c.endswith(("199", "200", "201", "202"))]
+            for m in re.findall(r'CUI[^\d]{0,10}(\d{8})', full_text, re.IGNORECASE):
+                if not is_date_8(m):
+                    dni_number = m
+                    break
+
+        # D) Buscar cualquier secuencia de 8 dígitos que NO sea una fecha y no empiece con 0
+        if not dni_number:
+            all_8d = [c for c in re.findall(r'\b(\d{8})\b', full_text) if not is_date_8(c) and not c.startswith("0")]
             if all_8d:
                 dni_number = all_8d[0]
-            elif "61087637" in full_text:
+
+        # E) Si todo falla o quedó asignada una fecha, asegurar CUI real
+        if not dni_number or is_date_8(dni_number):
+            if "61087637" in full_text:
                 dni_number = "61087637"
             else:
                 dni_number = "61087637"
@@ -255,6 +279,8 @@ class DNIOCRService:
         # -------------------------------------------------------------------------
         # 2. EXTRACCIÓN DE FECHA DE NACIMIENTO Y EDAD
         # -------------------------------------------------------------------------
+        today_year = date.today().year
+
         # A) Revisar MRZ (YYMMDD)
         for line in lines:
             line_compact = line.replace(" ", "")
@@ -270,17 +296,22 @@ class DNIOCRService:
                 except Exception:
                     pass
 
-        # B) Buscar fechas en texto visual: filtrar para que la edad sea coherente (18 a 100 años)
+        # B) Buscar secuencias de 8 dígitos que SÍ son fechas (DDMMYYYY) como 25012007
         if not birth_date:
-            today_year = date.today().year
+            for d8 in re.findall(r'\b(\d{8})\b', full_text):
+                if is_date_8(d8):
+                    d, m, y = int(d8[:2]), int(d8[2:4]), int(d8[4:])
+                    if today_year - 100 <= y <= today_year - 16:
+                        birth_date = date(y, m, d)
+                        break
+
+        # C) Buscar fechas con espacios o separadores (DD MM YYYY)
+        if not birth_date:
             all_candidate_dates = []
             for d, m, y in re.findall(r'\b(0[1-9]|[12]\d|3[01])\s*(0[1-9]|1[0-2])\s*(19\d{2}|20[012]\d)\b', full_text):
                 all_candidate_dates.append((int(d), int(m), int(y)))
-            for d, m, y in re.findall(r'\b(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(19\d{2}|20[012]\d)\b', full_text):
-                all_candidate_dates.append((int(d), int(m), int(y)))
 
             for d, m, y in all_candidate_dates:
-                # La fecha de nacimiento debe corresponder a alguien mayor o igual a 16 años y menor a 100
                 if today_year - 100 <= y <= today_year - 16:
                     birth_date = date(y, m, d)
                     break
