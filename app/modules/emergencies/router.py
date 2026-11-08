@@ -1,11 +1,12 @@
 """Rutas de API v1 para el módulo de emergencias vecinales de VeciRed IA."""
 import uuid
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.security import CurrentUser, get_current_user
 from app.modules.emergencies.dependencies import get_emergency_service
 from app.modules.emergencies.schemas import (
+    VolunteerResponse,
     EmergencyContributionCreate,
     EmergencyContributionResponse,
     EmergencyCreate,
@@ -62,6 +63,37 @@ async def get_active_emergency(
     el banner rojo superior en la aplicación móvil de VeciRed.
     """
     return await service.get_active_emergency(community_id=community_id)
+
+
+@router.get(
+    "/volunteers",
+    response_model=List[VolunteerResponse],
+    summary="Listar brigada de guardia comunitaria",
+)
+async def list_emergency_volunteers(
+    emergency_id: Optional[uuid.UUID] = Query(None),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Retorna los brigadistas registrados y guardia comunitaria activa."""
+    return await service.get_emergency_volunteers(emergency_id)
+
+
+@router.post(
+    "/volunteers",
+    response_model=List[VolunteerResponse],
+    summary="Unirse a la brigada comunitaria",
+)
+async def join_brigade_direct(
+    data: VolunteerRegister,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Permite unirse directamente a la brigada de guardia vecinal."""
+    return await service.register_volunteer(
+        emergency_id=None,
+        user_id=current_user.id,
+        data=data,
+    )
 
 
 @router.get(
@@ -185,3 +217,4 @@ async def broadcast_emergency_alert(
 ):
     """Envía notificaciones de alerta inmediata a todos los vecinos registrados en la comunidad."""
     return await service.broadcast_alert(emergency_id, current_user.id)
+

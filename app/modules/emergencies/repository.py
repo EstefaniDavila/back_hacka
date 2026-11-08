@@ -7,6 +7,7 @@ from sqlalchemy import desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.emergencies.models import (
+    EmergencyVolunteer,
     Emergency,
     EmergencyAlert,
     EmergencyContribution,
@@ -296,3 +297,93 @@ class EmergencyRepository:
         )
         res = await self.session.execute(stmt)
         return [dict(r) for r in res.mappings().all()]
+
+    # ------------------------------------------------------------------
+    # GESTIÓN DE VOLUNTARIOS Y BRIGADA VECINAL
+    # ------------------------------------------------------------------
+    async def list_volunteers(self, emergency_id: Optional[uuid.UUID] = None) -> List[Dict[str, Any]]:
+        """Lista los voluntarios registrados para una emergencia o general."""
+        from sqlalchemy import text
+        stmt = text("""
+            SELECT id, emergency_id, user_id, name, skill, avatar, distance_m, status, created_at
+            FROM emergency_volunteers
+            ORDER BY created_at DESC
+        """)
+        res = await self.session.execute(stmt)
+        rows = res.fetchall()
+        result = []
+        for r in rows:
+            dist = r[6] or 50
+            result.append({
+                "id": str(r[0]),
+                "emergency_id": str(r[1]) if r[1] else None,
+                "user_id": str(r[2]) if r[2] else None,
+                "name": r[3],
+                "skill": r[4] or "Apoyo Comunitario",
+                "avatar": r[5] or "👤",
+                "distance": f"{dist}m",
+                "distance_m": dist,
+                "status": r[7] or "En camino"
+            })
+        return result
+
+    async def add_volunteer(
+        self,
+        emergency_id: Optional[uuid.UUID],
+        user_id: uuid.UUID,
+        name: str,
+        skill: Optional[str],
+        avatar: Optional[str],
+        distance_m: Optional[int],
+        status: Optional[str] = "En camino"
+    ) -> Dict[str, Any]:
+        """Registra o actualiza a un vecino en la brigada de guardia."""
+        from sqlalchemy import text
+        vol_id = uuid.uuid4()
+        dist = distance_m if distance_m is not None else 50
+        
+        dev_uid = uuid.UUID("a0000000-0000-0000-0000-000000000001")
+        clean_name = name.strip() if name else "Vecino Solidario"
+
+        # Eliminar registro previo de este vecino para evitar duplicados (por nombre y/o uid real)
+        if user_id == dev_uid:
+            await self.session.execute(
+                text("DELETE FROM emergency_volunteers WHERE LOWER(name) = LOWER(:name)"),
+                {"name": clean_name}
+            )
+            assigned_user_id = uuid.uuid5(uuid.NAMESPACE_DNS, clean_name.lower())
+        else:
+            await self.session.execute(
+                text("DELETE FROM emergency_volunteers WHERE user_id = :uid OR LOWER(name) = LOWER(:name)"),
+                {"uid": user_id, "name": clean_name}
+            )
+            assigned_user_id = user_id
+
+        await self.session.execute(
+            text("""
+                INSERT INTO emergency_volunteers (id, emergency_id, user_id, name, skill, avatar, distance_m, status, created_at)
+                VALUES (:id, :eid, :uid, :name, :skill, :avatar, :dist, :status, NOW())
+            """),
+            {
+                "id": vol_id,
+                "eid": emergency_id,
+                "uid": assigned_user_id,
+                "name": name,
+                "skill": skill or "Apoyo Comunitario",
+                "avatar": avatar or "👤",
+                "dist": dist,
+                "status": status or "En camino"
+            }
+        )
+        await self.session.commit()
+        return {
+            "id": str(vol_id),
+            "emergency_id": str(emergency_id) if emergency_id else None,
+            "user_id": str(user_id),
+            "name": name,
+            "skill": skill or "Apoyo Comunitario",
+            "avatar": avatar or "👤",
+            "distance": f"{dist}m",
+            "distance_m": dist,
+            "status": status or "En camino"
+        }

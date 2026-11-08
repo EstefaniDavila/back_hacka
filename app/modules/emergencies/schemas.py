@@ -97,4 +97,22 @@ class EmergencyDetailResponse(EmergencyListItemResponse):
 
 class VolunteerRegister(BaseModel):
     """Payload para sumarse como voluntario ante la emergencia."""
+    name: Optional[str] = Field(None, max_length=150)
+    skill: Optional[str] = Field(None, max_length=100)
+    avatar: Optional[str] = Field("👤", max_length=50)
+    distance_m: Optional[int] = Field(50, description="Distancia real calculada en metros")
+    status: Optional[str] = Field("En camino", max_length=50)
     message: Optional[str] = Field(None, max_length=500, description="Mensaje o equipo disponible (ej: En camino con palas)")
+
+
+class VolunteerResponse(BaseModel):
+    """Ficha de un voluntario / brigadista vecinal en guardia."""
+    id: str
+    user_id: Optional[str] = None
+    name: str
+    skill: str
+    avatar: str = "👤"
+    distance: str = "50m"
+    distance_m: int = 50
+    status: str = "En guardia"
+    model_config = ConfigDict(from_attributes=True)

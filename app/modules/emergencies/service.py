@@ -3,12 +3,14 @@ import math
 import uuid
 from decimal import Decimal
 from typing import List, Optional
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import EntityNotFoundException, ValidationException, VeciRedException
 from app.modules.emergencies.models import Emergency, EmergencyNeed
 from app.modules.emergencies.repository import EmergencyRepository
 from app.modules.emergencies.schemas import (
+    VolunteerResponse,
     EmergencyContributionCreate,
     EmergencyContributionResponse,
     EmergencyCreate,
@@ -246,25 +248,59 @@ class EmergencyService:
             committed_at=contrib.committed_at,
         )
 
+    
+    async def get_emergency_volunteers(self, emergency_id: Optional[uuid.UUID] = None) -> List[VolunteerResponse]:
+        """Retorna todos los brigadistas registrados persistentes más la guardia base."""
+        db_volunteers = await self.repository.list_volunteers(emergency_id)
+        
+        # Brigada base comunitaria
+        base_guard = [
+            {"id": "base-1", "user_id": None, "name": "Martha Quispe", "skill": "Primeros Auxilios / Enfermería", "avatar": "👵", "distance": "50m", "distance_m": 50, "status": "En guardia"},
+            {"id": "base-2", "user_id": None, "name": "Carlos Ramos", "skill": "Electricidad y Gasfitería", "avatar": "👨‍🔧", "distance": "120m", "distance_m": 120, "status": "Disponible"},
+            {"id": "base-3", "user_id": None, "name": "Lucía Mendoza", "skill": "Apoyo Logístico / Agua", "avatar": "👩", "distance": "180m", "distance_m": 180, "status": "En guardia"},
+        ]
+        
+        # Priorizar voluntarios registrados reales
+        seen_names = set()
+        final_list = []
+        for v in db_volunteers:
+            seen_names.add(v["name"])
+            final_list.append(VolunteerResponse(**v))
+            
+        for bg in base_guard:
+            if bg["name"] not in seen_names:
+                final_list.append(VolunteerResponse(**bg))
+                
+        return final_list
+
     async def register_volunteer(
         self,
-        emergency_id: uuid.UUID,
+        emergency_id: Optional[uuid.UUID],
         user_id: uuid.UUID,
         data: VolunteerRegister,
-    ) -> dict:
-        """Registra a un vecino como voluntario en camino para atender la emergencia."""
-        emg = await self.repository.get_emergency_by_id(emergency_id)
-        if not emg:
-            raise EntityNotFoundException("Emergencia", emergency_id)
+    ) -> List[VolunteerResponse]:
+        """Registra a un vecino real en la brigada de guardia con distancia en metros."""
+        # Obtener datos del perfil del usuario si no fueron enviados
+        from app.modules.users.models import Profile
+        stmt = select(Profile).where(Profile.id == user_id)
+        res = await self.session.execute(stmt)
+        profile = res.scalar_one_or_none()
+        
+        vol_name = data.name or (profile.full_name if profile else "Vecino Solidario")
+        vol_skill = data.skill or (profile.skill if (profile and profile.skill) else "Apoyo Comunitario")
+        vol_avatar = data.avatar or (profile.avatar_url if (profile and profile.avatar_url and len(profile.avatar_url) <= 10) else "👤")
+        dist = data.distance_m if data.distance_m is not None else 45
 
-        # Si el estado es solo 'reportada', pasar a 'en_atencion' automáticamente
-        if emg.status == "reportada":
-            await self.repository.update_status(emg, "en_atencion")
-            await self.session.commit()
+        # Guardar en base de datos
+        await self.repository.add_volunteer(
+            emergency_id=emergency_id,
+            user_id=user_id,
+            name=vol_name,
+            skill=vol_skill,
+            avatar=vol_avatar,
+            distance_m=dist,
+            status=data.status or "En camino"
+        )
+        
+        return await self.get_emergency_volunteers(emergency_id)
 
-        return {
-            "status": "success",
-            "message": "Te has registrado como voluntario en camino para esta emergencia.",
-            "emergency_id": emergency_id,
-            "volunteer_id": user_id,
-        }
