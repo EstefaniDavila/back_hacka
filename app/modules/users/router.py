@@ -326,7 +326,7 @@ async def start_dni_verification_session(
     logger.info("Procesando fotos de DNI en sesión de verificación (front: %d bytes)", len(front_bytes))
 
     try:
-        ocr_result = dni_ocr_service.extract_dni_data(
+        ocr_result = await dni_ocr_service.extract_dni_data(
             front_bytes=front_bytes,
             back_bytes=back_bytes,
         )
@@ -482,7 +482,7 @@ async def extract_dni_endpoint(
     back_bytes = await dni_back.read() if dni_back else None
 
     try:
-        ocr_result = dni_ocr_service.extract_dni_data(
+        ocr_result = await dni_ocr_service.extract_dni_data(
             front_bytes=front_bytes,
             back_bytes=back_bytes,
         )
