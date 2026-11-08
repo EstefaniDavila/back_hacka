@@ -257,10 +257,13 @@ class CommerceRepository:
         items = []
         for row in rows:
             svc = row[0]
+            prov_name = row.provider_name
+            if not prov_name or not str(prov_name).strip() or str(prov_name).strip() == "EMPTY":
+                prov_name = "Vecino Solidario"
             items.append({
                 "id": svc.id,
                 "provider_id": svc.provider_id,
-                "provider_name": row.provider_name,
+                "provider_name": prov_name,
                 "provider_avatar": row.provider_avatar,
                 "provider_phone": row.provider_phone,
                 "is_verified": row.provider_status in ("verified", "active"),
@@ -327,10 +330,14 @@ class CommerceRepository:
         # Obtener las reseñas recientes
         reviews = await self.get_service_reviews(service_id, limit=5)
 
+        detail_prov_name = profile.full_name
+        if not detail_prov_name or not str(detail_prov_name).strip() or str(detail_prov_name).strip() == "EMPTY":
+            detail_prov_name = "Vecino Solidario"
+
         return {
             "id": svc.id,
             "provider_id": svc.provider_id,
-            "provider_name": profile.full_name,
+            "provider_name": detail_prov_name,
             "provider_avatar": profile.avatar_url,
             "provider_phone": profile.phone,
             "is_verified": profile.account_status in ("verified", "active"),

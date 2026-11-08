@@ -43,7 +43,16 @@ class UserService:
     ) -> Profile:
         """Obtiene el perfil existente o inicializa uno nuevo a partir de Supabase Auth."""
         profile = await self.profile_repo.get_by_id(user_id)
-        if not profile:
+        if profile and (not profile.full_name or not profile.full_name.strip() or profile.full_name == "EMPTY"):
+            resolved_name = (
+                full_name.strip()
+                if full_name and full_name.strip()
+                else (email.split("@")[0].title() if email else "Vecino VeciRed")
+            )
+            profile.full_name = resolved_name
+            await self.session.commit()
+            logger.info("Perfil reparado para el usuario %s (%s)", user_id, resolved_name)
+        elif not profile:
             resolved_name = (
                 full_name.strip()
                 if full_name and full_name.strip()
@@ -82,6 +91,21 @@ class UserService:
             profile = await self.get_or_create_profile(user_id)
 
         update_dict = profile_update.model_dump(exclude_unset=True)
+        # Candado de seguridad: Nunca permitir que full_name o phone se sobreescriban con valores vacíos
+        if "full_name" in update_dict:
+            fn = str(update_dict["full_name"]).strip() if update_dict["full_name"] else ""
+            if not fn or fn == "EMPTY":
+                update_dict.pop("full_name")
+            else:
+                update_dict["full_name"] = fn
+
+        if "phone" in update_dict:
+            ph = str(update_dict["phone"]).strip() if update_dict["phone"] else ""
+            if not ph or ph == "EMPTY":
+                update_dict.pop("phone")
+            else:
+                update_dict["phone"] = ph
+
         skill_val = update_dict.pop("skill", None)
         skills_val = update_dict.pop("skills", None)
 
