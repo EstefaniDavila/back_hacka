@@ -11,6 +11,8 @@ class ProfileBase(BaseModel):
     avatar_url: Optional[str] = Field(None, description="URL del avatar del usuario")
     birth_date: Optional[date] = Field(None, description="Fecha de nacimiento")
     font_scale_preference: Optional[str] = Field("1.0", max_length=20, description="Preferencia de tamaño de fuente: 1.0, 1.15, 1.30")
+    skill: Optional[str] = Field("Apoyo general", description="Habilidad u oficio principal del vecino")
+    skills: Optional[List[str]] = Field(default_factory=list, description="Lista de habilidades y servicios que ofrece")
 
 
 class ProfileCreate(ProfileBase):
@@ -25,6 +27,8 @@ class ProfileUpdate(BaseModel):
     birth_date: Optional[date] = None
     font_scale_preference: Optional[str] = Field(None, max_length=20)
     account_status: Optional[str] = Field(None, max_length=20)
+    skill: Optional[str] = Field(None, description="Habilidad u oficio principal")
+    skills: Optional[List[str]] = Field(None, description="Lista de habilidades")
 
 
 class ProfileResponse(ProfileBase):

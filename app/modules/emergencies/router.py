@@ -172,3 +172,16 @@ async def register_as_volunteer(
         user_id=current_user.id,
         data=data,
     )
+
+
+@router.post(
+    "/{emergency_id}/broadcast",
+    summary="Disparar transmisión de alerta y notificaciones a los vecinos",
+)
+async def broadcast_emergency_alert(
+    emergency_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Envía notificaciones de alerta inmediata a todos los vecinos registrados en la comunidad."""
+    return await service.broadcast_alert(emergency_id, current_user.id)

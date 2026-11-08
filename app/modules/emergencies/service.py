@@ -19,6 +19,7 @@ from app.modules.emergencies.schemas import (
     EmergencyStatusUpdate,
     VolunteerRegister,
 )
+from app.modules.notifications.repository import NotificationRepository
 from app.shared.pagination import PageMeta, PaginatedResponse
 
 
@@ -28,6 +29,7 @@ class EmergencyService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = EmergencyRepository(session)
+        self.notif_repository = NotificationRepository(session)
 
     async def list_emergencies(
         self,
@@ -107,7 +109,7 @@ class EmergencyService:
         user_id: uuid.UUID,
         data: EmergencyCreate,
     ) -> EmergencyDetailResponse:
-        """Reporta una nueva emergencia vecinal e inicializa necesidades base."""
+        """Reporta una nueva emergencia vecinal, siembra necesidades y envía alertas a la comunidad."""
         community_id = data.community_id
         if not community_id:
             community_id = await self.repository.get_first_active_community_id()
@@ -139,8 +141,43 @@ class EmergencyService:
                 unit=r_unit,
             )
 
+        # Emitir notificaciones de alerta inmediata a los vecinos de la comunidad
+        try:
+            await self.notif_repository.broadcast_alert_to_community(
+                alert_id=emg.id,
+                title=emg.title,
+                message=emg.description or "Se ha activado una alerta en tu manzana.",
+                sender_id=user_id,
+            )
+        except Exception:
+            pass
+
         await self.session.commit()
         return await self.get_emergency_detail(emg.id)
+
+    async def broadcast_alert(
+        self,
+        emergency_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> dict:
+        """Dispara manualmente el envío de notificaciones a toda la comunidad vecinal."""
+        emg = await self.repository.get_emergency_by_id(emergency_id)
+        if not emg:
+            raise EntityNotFoundException("Emergencia", emergency_id)
+
+        count = await self.notif_repository.broadcast_alert_to_community(
+            alert_id=emg.id,
+            title=emg.title,
+            message=emg.description or "Alerta vecinal activa en tu zona.",
+            sender_id=user_id,
+        )
+        await self.session.commit()
+        return {
+            "status": "success",
+            "message": f"Alerta vecinal enviada con éxito a {count} vecinos de la comunidad.",
+            "emergency_id": emergency_id,
+            "notifications_sent": count,
+        }
 
     async def update_status(
         self,

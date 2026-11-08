@@ -8,6 +8,7 @@ from app.core.exceptions import EntityNotFoundException, ValidationException, Ve
 from app.modules.commerce.models import Product, Service, ServiceCategory
 from app.modules.commerce.repository import CommerceRepository
 from app.modules.commerce.schemas import (
+    ProductCategoryCreate,
     ProductCategoryResponse,
     ProductCreate,
     ProductDetailResponse,
@@ -423,3 +424,12 @@ class CommerceService:
 
         await self.repository.delete_product(product_id)
         await self.session.commit()
+
+    async def create_product_category(
+        self,
+        data: ProductCategoryCreate,
+    ) -> ProductCategoryResponse:
+        """Crea y persiste una nueva categoría de productos barriales."""
+        cat = await self.repository.create_product_category(name=data.name)
+        await self.session.commit()
+        return ProductCategoryResponse.model_validate(cat)

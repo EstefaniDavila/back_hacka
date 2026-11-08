@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from app.core.security import CurrentUser, get_current_user
 from app.modules.commerce.dependencies import get_commerce_service
 from app.modules.commerce.schemas import (
+    ProductCategoryCreate,
     ProductCategoryResponse,
     ProductCreate,
     ProductDetailResponse,
@@ -32,6 +33,21 @@ async def list_product_categories(
 ):
     """Retorna las categorías disponibles para clasificar productos barriales (Panadería, Bodega, etc.)."""
     return await service.list_product_categories()
+
+@router.post(
+    "/categories",
+    response_model=ProductCategoryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear una nueva categoría de productos",
+)
+async def create_product_category(
+    data: ProductCategoryCreate,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: CommerceService = Depends(get_commerce_service),
+):
+    """Permite registrar una categoría para clasificar productos en el mercado vecinal."""
+    return await service.create_product_category(data)
+
 
 
 # -------------------------------------------------------------

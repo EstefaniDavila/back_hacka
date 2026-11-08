@@ -127,6 +127,10 @@ class ProductCategoryBase(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
 
 
+class ProductCategoryCreate(ProductCategoryBase):
+    pass
+
+
 class ProductCategoryResponse(ProductCategoryBase):
     id: uuid.UUID
     model_config = ConfigDict(from_attributes=True)

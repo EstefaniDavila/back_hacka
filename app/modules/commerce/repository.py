@@ -703,3 +703,14 @@ class CommerceRepository:
         stmt = delete(Product).where(Product.id == product_id)
         res = await self.session.execute(stmt)
         return (res.rowcount or 0) > 0
+
+    async def create_product_category(self, name: str) -> ProductCategory:
+        """Crea una nueva categoría de productos."""
+        cat = ProductCategory(
+            id=uuid.uuid4(),
+            name=name.strip(),
+        )
+        self.session.add(cat)
+        await self.session.flush()
+        await self.session.refresh(cat)
+        return cat
