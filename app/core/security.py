@@ -68,21 +68,31 @@ async def get_current_user(
     Soporta:
     1. Header estándar Authorization: Bearer <token_supabase>
     2. Header X-Test-User-Id en entorno development/debug para pruebas automatizadas.
+    3. Usuario local por defecto en entorno development si no se envía header.
     """
-    # 1. Bypass para pruebas si DEBUG está activo y viene header de test
-    if settings.DEBUG and x_test_user_id:
-        try:
-            user_uuid = uuid.UUID(x_test_user_id)
+    # 1. Bypass para pruebas si DEBUG está activo y viene header de test o fallback
+    if settings.DEBUG:
+        if x_test_user_id:
+            try:
+                user_uuid = uuid.UUID(x_test_user_id)
+                return CurrentUser(
+                    id=user_uuid,
+                    email="test_user@vecired.local",
+                    role="authenticated",
+                    raw_claims={"sub": str(user_uuid), "test": True},
+                )
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="X-Test-User-Id debe ser un UUID válido.",
+                )
+        if not auth_header or not auth_header.credentials:
+            dev_user_uuid = uuid.UUID("a0000000-0000-0000-0000-000000000001")
             return CurrentUser(
-                id=user_uuid,
-                email="test_user@vecired.local",
+                id=dev_user_uuid,
+                email="vecino@vecired.local",
                 role="authenticated",
-                raw_claims={"sub": str(user_uuid), "test": True},
-            )
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="X-Test-User-Id debe ser un UUID válido.",
+                raw_claims={"sub": str(dev_user_uuid), "test": True},
             )
 
     # 2. Validación de Bearer Token
@@ -120,4 +130,3 @@ async def get_current_user(
         role=role,
         raw_claims=payload,
     )
-
