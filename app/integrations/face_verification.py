@@ -43,15 +43,15 @@ class FaceVerificationService:
             return None
         if not self._initialized:
             try:
-                # Inicializar modelo liviano de detección y embeddings faciales con ONNX Runtime
+                # Inicializar modelo de alta precisión buffalo_l para embeddings y landmarks
                 app = FaceAnalysis(
-                    name="buffalo_s",
+                    name="buffalo_l",
                     providers=["CPUExecutionProvider"]
                 )
-                app.prepare(ctx_id=-1, det_size=(320, 320))
+                app.prepare(ctx_id=-1, det_size=(640, 640))
                 self._app = app
                 self._initialized = True
-                logger.info("InsightFace FaceAnalysis inicializado con ONNX Runtime exitosamente.")
+                logger.info("InsightFace buffalo_l inicializado con ONNX Runtime exitosamente.")
             except Exception as e:
                 logger.warning(
                     "InsightFace modelo automático no disponible localmente (%s). Usando motor biométrico híbrido.",
