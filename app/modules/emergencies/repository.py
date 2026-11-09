@@ -472,3 +472,106 @@ class EmergencyRepository:
             "distance_m": dist,
             "status": status or "En camino"
         }
+
+    # ------------------------------------------------------------------
+    # REPORTES Y FOTOS COMUNITARIAS DE LA ALERTA (RED SOCIAL VECINAL)
+    # ------------------------------------------------------------------
+    async def ensure_reports_table(self):
+        """Asegura la existencia de la tabla emergency_community_reports."""
+        from sqlalchemy import text
+        try:
+            await self.session.execute(text("""
+                CREATE TABLE IF NOT EXISTS emergency_community_reports (
+                    id UUID PRIMARY KEY,
+                    emergency_id UUID NOT NULL,
+                    user_id UUID,
+                    author_name VARCHAR(150) NOT NULL,
+                    author_avatar VARCHAR(50),
+                    message TEXT NOT NULL,
+                    image_url TEXT,
+                    distance_m INTEGER DEFAULT 50,
+                    role_badge VARCHAR(80) DEFAULT 'Brigadista en Escena',
+                    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+                );
+            """))
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+
+    async def list_community_reports(self, emergency_id: uuid.UUID) -> List[Dict[str, Any]]:
+        """Lista los reportes y fotos comunitarias de una emergencia en orden cronológico inverso."""
+        from sqlalchemy import text
+        await self.ensure_reports_table()
+        stmt = text("""
+            SELECT id, emergency_id, user_id, author_name, author_avatar, message, image_url, distance_m, role_badge, created_at
+            FROM emergency_community_reports
+            WHERE emergency_id = :eid
+            ORDER BY created_at DESC
+        """)
+        try:
+            res = await self.session.execute(stmt, {"eid": emergency_id})
+            rows = res.fetchall()
+            return [
+                {
+                    "id": str(r[0]),
+                    "emergency_id": str(r[1]),
+                    "user_id": str(r[2]) if r[2] else None,
+                    "author_name": r[3],
+                    "author_avatar": r[4] or "🧑",
+                    "message": r[5],
+                    "image_url": r[6],
+                    "distance_m": r[7] or 50,
+                    "role_badge": r[8] or "Brigadista en Escena",
+                    "created_at": r[9]
+                }
+                for r in rows
+            ]
+        except Exception:
+            return []
+
+    async def add_community_report(
+        self,
+        emergency_id: uuid.UUID,
+        user_id: Optional[uuid.UUID],
+        author_name: str,
+        author_avatar: Optional[str],
+        message: str,
+        image_url: Optional[str],
+        distance_m: Optional[int],
+        role_badge: Optional[str]
+    ) -> Dict[str, Any]:
+        """Inserta un nuevo reporte / foto de evidencia de la comunidad."""
+        from sqlalchemy import text
+        from datetime import datetime
+        await self.ensure_reports_table()
+        report_id = uuid.uuid4()
+        now = datetime.utcnow()
+        stmt = text("""
+            INSERT INTO emergency_community_reports (id, emergency_id, user_id, author_name, author_avatar, message, image_url, distance_m, role_badge, created_at)
+            VALUES (:id, :eid, :uid, :name, :avatar, :msg, :img, :dist, :role, :created_at)
+        """)
+        await self.session.execute(stmt, {
+            "id": report_id,
+            "eid": emergency_id,
+            "uid": user_id,
+            "name": author_name.strip() if author_name else "Vecino Respondedor",
+            "avatar": author_avatar or "🧑",
+            "msg": message.strip() if message else "Reporte de situación",
+            "img": image_url,
+            "dist": distance_m if distance_m is not None else 50,
+            "role": role_badge or "Brigadista en Escena",
+            "created_at": now
+        })
+        await self.session.commit()
+        return {
+            "id": str(report_id),
+            "emergency_id": str(emergency_id),
+            "user_id": str(user_id) if user_id else None,
+            "author_name": author_name,
+            "author_avatar": author_avatar or "🧑",
+            "message": message,
+            "image_url": image_url,
+            "distance_m": distance_m or 50,
+            "role_badge": role_badge or "Brigadista en Escena",
+            "created_at": now
+        }

@@ -308,3 +308,30 @@ class EmergencyService:
         
         return await self.get_emergency_volunteers(emergency_id)
 
+
+    async def list_community_reports(self, emergency_id: uuid.UUID) -> List[Dict[str, Any]]:
+        """Obtiene la lista de evidencias fotográficas y comentarios de la comunidad para la alerta."""
+        return await self.repository.list_community_reports(emergency_id)
+
+    async def create_community_report(
+        self,
+        emergency_id: uuid.UUID,
+        user_id: Optional[uuid.UUID],
+        author_name: str,
+        author_avatar: Optional[str],
+        message: str,
+        image_url: Optional[str],
+        distance_m: Optional[int],
+        role_badge: Optional[str]
+    ) -> Dict[str, Any]:
+        """Registra un nuevo reporte fotográfico o situacional de la brigada."""
+        return await self.repository.add_community_report(
+            emergency_id=emergency_id,
+            user_id=user_id,
+            author_name=author_name,
+            author_avatar=author_avatar,
+            message=message,
+            image_url=image_url,
+            distance_m=distance_m,
+            role_badge=role_badge
+        )

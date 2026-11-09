@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Query, status
 from app.core.security import CurrentUser, get_current_user
 from app.modules.emergencies.dependencies import get_emergency_service
 from app.modules.emergencies.schemas import (
+    CommunityReportCreate,
+    CommunityReportResponse,
     VolunteerResponse,
     EmergencyContributionCreate,
     EmergencyContributionResponse,
@@ -247,3 +249,42 @@ async def broadcast_emergency_alert(
     """Envía notificaciones de alerta inmediata a todos los vecinos registrados en la comunidad."""
     return await service.broadcast_alert(emergency_id, current_user.id)
 
+
+
+@router.get(
+    "/{emergency_id}/community-reports",
+    response_model=List[CommunityReportResponse],
+    summary="Listar evidencias fotográficas y reportes de vecinos para la alerta",
+)
+async def list_community_reports(
+    emergency_id: uuid.UUID,
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Retorna el muro situacional y fotos subidas por brigadistas y vecinos."""
+    return await service.list_community_reports(emergency_id)
+
+
+@router.post(
+    "/{emergency_id}/community-reports",
+    response_model=CommunityReportResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Publicar foto de evidencia o reporte situacional de la brigada",
+)
+async def create_community_report(
+    emergency_id: uuid.UUID,
+    data: CommunityReportCreate,
+    current_user: Optional[CurrentUser] = Depends(get_current_user),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Permite a cualquier vecino o brigadista subir fotos y reportes a la alerta."""
+    user_id = current_user.id if current_user else None
+    return await service.create_community_report(
+        emergency_id=emergency_id,
+        user_id=user_id,
+        author_name=data.author_name,
+        author_avatar=data.author_avatar,
+        message=data.message,
+        image_url=data.image_url,
+        distance_m=data.distance_m,
+        role_badge=data.role_badge
+    )

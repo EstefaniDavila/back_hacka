@@ -310,25 +310,57 @@ class DNIOCRService:
                 first_name = fn
                 break
 
-        # B) Extracción por etiquetas visuales ("Apellidos", "Prenombres", etc.)
-        if not last_name or not first_name:
-            for i, l in enumerate(lines):
-                lu = l.upper()
-                if re.search(r'\b(APELLIDOS?|PRIMER APELLIDO)\b', lu) and not last_name:
-                    cand = re.sub(r'.*?\b(APELLIDOS?|PRIMER APELLIDO|SEGUNDO APELLIDO)\b[:\- ]*', '', lu).strip()
-                    words = [w for w in cand.split() if w.isalpha() and len(w) > 2 and w not in STOPWORDS]
-                    if not words and i + 1 < len(lines):
-                        words = [w for w in lines[i+1].upper().split() if w.isalpha() and len(w) > 2 and w not in STOPWORDS]
-                    if words:
-                        last_name = " ".join(words[:2])
+        # B) Extracción por etiquetas visuales ("Primer Apellido", "Segundo Apellido", "Pre Nombres", etc.)
+        primer_ap = None
+        segundo_ap = None
+        prenombres = None
 
-                if re.search(r'\b(PRE\s*NOMBRES?|PRENOMBRES?|NOMBRES?)\b', lu) and not first_name:
-                    cand = re.sub(r'.*?\b(PRE\s*NOMBRES?|PRENOMBRES?|NOMBRES?)\b[:\- ]*', '', lu).strip()
-                    words = [w for w in cand.split() if w.isalpha() and len(w) > 2 and w not in STOPWORDS]
-                    if not words and i + 1 < len(lines):
-                        words = [w for w in lines[i+1].upper().split() if w.isalpha() and len(w) > 2 and w not in STOPWORDS]
-                    if words:
-                        first_name = " ".join(words[:3])
+        for i, l in enumerate(lines):
+            lu = l.upper()
+            if "PRIMER APELLIDO" in lu and not primer_ap:
+                cand = re.sub(r'.*?PRIMER APELLIDO[:\- ]*', '', lu).strip()
+                w = [x for x in cand.split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if not w and i + 1 < len(lines):
+                    w = [x for x in lines[i+1].upper().split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if w:
+                    primer_ap = w[0]
+
+            if "SEGUNDO APELLIDO" in lu and not segundo_ap:
+                cand = re.sub(r'.*?SEGUNDO APELLIDO[:\- ]*', '', lu).strip()
+                w = [x for x in cand.split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if not w and i + 1 < len(lines):
+                    w = [x for x in lines[i+1].upper().split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if w:
+                    segundo_ap = w[0]
+
+            if re.search(r'\b(PRE\s*NOMBRES?|PRENOMBRES?)\b', lu) and not prenombres:
+                cand = re.sub(r'.*?\b(PRE\s*NOMBRES?|PRENOMBRES?)\b[:\- ]*', '', lu).strip()
+                w = [x for x in cand.split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if not w and i + 1 < len(lines):
+                    w = [x for x in lines[i+1].upper().split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if w:
+                    prenombres = " ".join(w)
+
+            if re.search(r'\bAPELLIDOS\b', lu) and not primer_ap and not last_name:
+                cand = re.sub(r'.*?\bAPELLIDOS\b[:\- ]*', '', lu).strip()
+                w = [x for x in cand.split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if not w and i + 1 < len(lines):
+                    w = [x for x in lines[i+1].upper().split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if w:
+                    last_name = " ".join(w[:2])
+
+            if re.search(r'\bNOMBRES\b', lu) and not prenombres and not first_name and "PRE" not in lu:
+                cand = re.sub(r'.*?\bNOMBRES\b[:\- ]*', '', lu).strip()
+                w = [x for x in cand.split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if not w and i + 1 < len(lines):
+                    w = [x for x in lines[i+1].upper().split() if x.isalpha() and len(x) > 1 and x not in STOPWORDS]
+                if w:
+                    first_name = " ".join(w[:2])
+
+        if primer_ap or segundo_ap:
+            last_name = f"{primer_ap or ''} {segundo_ap or ''}".strip()
+        if prenombres:
+            first_name = prenombres
 
         # C) Casos verificados de prueba
         if dni_number == "61087637" or "61087637" in compact_text:

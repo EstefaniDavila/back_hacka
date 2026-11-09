@@ -118,3 +118,18 @@ class EmergencyVolunteer(Base):
     status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, default="En camino")
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=datetime.utcnow)
 
+
+class EmergencyCommunityReport(Base):
+    """Modelo para reportes, fotos y comentarios situacionales de vecinos y brigadistas en una alerta."""
+    __tablename__ = "emergency_community_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    emergency_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
+    author_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    author_avatar: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    distance_m: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=50)
+    role_badge: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, default="Brigadista en Escena")
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=datetime.utcnow)

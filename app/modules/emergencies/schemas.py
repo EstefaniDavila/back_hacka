@@ -120,3 +120,29 @@ class VolunteerResponse(BaseModel):
     distance_m: int = 50
     status: str = "En guardia"
     model_config = ConfigDict(from_attributes=True)
+
+class CommunityReportCreate(BaseModel):
+    """Payload para enviar un reporte situacional / foto de evidencia a la alerta."""
+    author_name: str = Field(..., max_length=150, description="Nombre del brigadista o vecino")
+    author_avatar: Optional[str] = Field("🧑", max_length=50, description="Avatar o emoji del autor")
+    message: str = Field(..., description="Comentario o reporte de la situación")
+    image_url: Optional[str] = Field(None, description="Foto de evidencia (URL o base64)")
+    distance_m: Optional[int] = Field(50, description="Distancia estimada en metros al epicentro")
+    role_badge: Optional[str] = Field("Brigadista en Escena", description="Distintivo del autor")
+
+
+class CommunityReportResponse(BaseModel):
+    """Respuesta serializada de un reporte comunitario."""
+    id: str
+    emergency_id: str
+    user_id: Optional[str] = None
+    author_name: str
+    author_avatar: Optional[str] = "🧑"
+    message: str
+    image_url: Optional[str] = None
+    distance_m: Optional[int] = 50
+    role_badge: Optional[str] = "Brigadista en Escena"
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
