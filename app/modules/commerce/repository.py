@@ -91,6 +91,7 @@ class CommerceRepository:
         price_unit: Optional[str] = "servicio",
         availability: Optional[str] = None,
         address_id: Optional[uuid.UUID] = None,
+        image_url: Optional[str] = None,
     ) -> Service:
         """Crea un nuevo servicio en la base de datos."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -105,6 +106,7 @@ class CommerceRepository:
             price_from=price_from,
             price_unit=price_unit or "servicio",
             availability=availability.strip() if availability else None,
+            image_url=image_url.strip() if image_url else None,
             status="active",
             created_at=now,
         )
@@ -274,6 +276,7 @@ class CommerceRepository:
                 "community_name": row.community_name,
                 "title": svc.title,
                 "description": svc.description,
+                "image_url": getattr(svc, "image_url", None),
                 "price_from": svc.price_from,
                 "price_unit": svc.price_unit,
                 "availability": svc.availability,
