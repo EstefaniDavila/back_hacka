@@ -18,11 +18,12 @@ if not exist .venv (
 echo.
 echo ===================================================
 echo Servidor backend disponible en:
-echo   - Local:     http://localhost:8000
-echo   - Swagger:   http://localhost:8000/docs
+echo   - Local PC:    http://localhost:8000
+echo   - Celular/Red: http://192.168.0.175:8000
+echo   - Swagger API: http://192.168.0.175:8000/docs
 echo ===================================================
 echo.
 echo Presiona Ctrl + C para detener el servidor.
 echo.
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 pause
