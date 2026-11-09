@@ -61,6 +61,7 @@ class EmergencyRepository:
                 Emergency.emergency_type,
                 Emergency.title,
                 Emergency.description,
+                Emergency.image_url,
                 Emergency.severity,
                 Emergency.status,
                 Emergency.occurred_at,
@@ -118,6 +119,7 @@ class EmergencyRepository:
                 Emergency.emergency_type,
                 Emergency.title,
                 Emergency.description,
+                Emergency.image_url,
                 Emergency.severity,
                 Emergency.status,
                 Emergency.occurred_at,
@@ -164,6 +166,7 @@ class EmergencyRepository:
                 Emergency.emergency_type,
                 Emergency.title,
                 Emergency.description,
+                Emergency.image_url,
                 Emergency.severity,
                 Emergency.status,
                 Emergency.occurred_at,
@@ -213,6 +216,7 @@ class EmergencyRepository:
         severity: str = "high",
         address_id: Optional[uuid.UUID] = None,
         alert_radius_m: Optional[int] = 500,
+        image_url: Optional[str] = None,
     ) -> Emergency:
         """Crea un nuevo reporte de emergencia comunitaria y genera la alerta barrial."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -225,6 +229,7 @@ class EmergencyRepository:
             title=title.strip(),
             description=description.strip() if description else None,
             severity=severity,
+            image_url=image_url.strip() if image_url else None,
             status="reportada",
             occurred_at=now,
             created_at=now,
@@ -239,6 +244,7 @@ class EmergencyRepository:
             created_by=reported_by,
             alert_radius_m=alert_radius_m or 500,
             message=f"🚨 ALERTA: {title}",
+            image_url=image_url.strip() if image_url else None,
             created_at=now,
         )
         self.session.add(alert)

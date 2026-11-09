@@ -136,6 +136,7 @@ class EmergencyService:
             severity=data.severity,
             address_id=data.address_id,
             alert_radius_m=data.alert_radius_m,
+            image_url=data.image_url,
         )
 
         # Sembrar necesidades por defecto para facilitar pruebas y uso inmediato

@@ -115,6 +115,7 @@ class CommerceService:
             price_from=data.price_from,
             price_unit=data.price_unit,
             availability=data.availability,
+            image_url=data.image_url,
         )
         await self.session.commit()
         return await self.get_service_detail(service.id)

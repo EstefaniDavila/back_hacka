@@ -60,6 +60,7 @@ class EmergencyCreate(BaseModel):
     community_id: Optional[uuid.UUID] = Field(None, description="ID de la comunidad vecinal")
     address_id: Optional[uuid.UUID] = Field(None, description="ID de dirección específica si aplica")
     alert_radius_m: Optional[int] = Field(500, description="Radio de alerta en metros para notificación a vecinos")
+    image_url: Optional[str] = Field(None, description="Foto o evidencia del accidente/suceso")
 
 
 class EmergencyStatusUpdate(BaseModel):
@@ -78,6 +79,7 @@ class EmergencyListItemResponse(BaseModel):
     emergency_type: str
     title: str
     description: Optional[str] = None
+    image_url: Optional[str] = None
     severity: str
     status: str
     occurred_at: Optional[datetime] = None

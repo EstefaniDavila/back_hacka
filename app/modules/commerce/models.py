@@ -53,6 +53,7 @@ class Service(Base):
     price_from: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     price_unit: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     availability: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 

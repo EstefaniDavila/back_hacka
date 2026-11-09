@@ -23,6 +23,7 @@ class Emergency(Base):
     title: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     severity: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     occurred_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -88,6 +89,7 @@ class EmergencyAlert(Base):
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('profiles.id'), nullable=False)
     alert_radius_m: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 class AlertDelivery(Base):
