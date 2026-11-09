@@ -9,6 +9,7 @@ from app.modules.search.repository import (
     SearchRepository,
     expand_query_terms,
     haversine_distance_km,
+    haversine_distance_meters,
     strip_accents,
 )
 from app.modules.search.schemas import (
@@ -116,42 +117,49 @@ class SearchService:
         item_lat: Optional[float],
         item_lon: Optional[float],
         radius_km: Optional[float] = None,
-    ) -> Tuple[Optional[float], float, bool]:
+    ) -> Tuple[Optional[float], Optional[float], float, bool]:
         """
-        Retorna (distance_km, distance_score, within_radius).
-        Si no existen coordenadas, no inventa distancias y otorga puntuación neutra.
+        Retorna (distance_km, distance_meters, distance_score, within_radius).
+        - Mide la distancia real en metros entre el GPS del usuario y las coordenadas de la publicación o vecino.
+        - Excluye resultados fuera del radio seleccionado (mínimo 1 km o superior).
+        - No inventa distancias ficticias cuando no hay coordenadas GPS.
         """
         if user_lat is None or user_lon is None or item_lat is None or item_lon is None:
-            # Sin GPS disponible: neutral
             if radius_km is not None:
-                # Si el usuario exigió un radio estricto y no hay coordenadas, se descarta
-                return None, 0.40, False
-            return None, 0.50, True
+                # Con radio de filtrado estricto, sin GPS se descarta
+                return None, None, 0.0, False
+            return None, None, 0.50, True
 
-        dist_km = haversine_distance_km(user_lat, user_lon, item_lat, item_lon)
+        dist_meters = haversine_distance_meters(user_lat, user_lon, item_lat, item_lon)
+        dist_km = round(dist_meters / 1000.0, 3)
 
-        if radius_km is not None and dist_km > radius_km:
-            return dist_km, 0.0, False
+        # Excluir resultados fuera del radio seleccionado
+        if radius_km is not None:
+            max_meters = radius_km * 1000.0
+            if dist_meters > max_meters:
+                return dist_km, dist_meters, 0.0, False
 
-        # Modelo de decaimiento suave hiperbólico:
-        # 0 km = 1.0 | 1 km = 0.80 | 3 km = 0.57 | 5 km = 0.44 | 10 km = 0.28
-        dist_score = 1.0 / (1.0 + 0.25 * dist_km)
-        return dist_km, round(dist_score, 3), True
+        # Normalización continua y equitativa de proximidad (0.0 a 1.0)
+        eff_radius_m = (radius_km * 1000.0) if radius_km else 5000.0
+        # A 0 m -> 1.0; a eff_radius_m -> 0.0
+        dist_score = max(0.0, min(1.0, 1.0 - (dist_meters / eff_radius_m)))
+
+        return dist_km, dist_meters, round(dist_score, 4), True
 
     def _calculate_bayesian_reputation(
         self,
         reviews_count: int,
         rating_avg: float,
-        prior_mean: float = 4.0,
+        prior_mean: float = 4.2,
         min_reviews_threshold: int = 3,
     ) -> Tuple[float, float, bool]:
         """
         Calcula el promedio ponderado bayesiano de reputación y detecta usuarios nuevos.
         Retorna (bayesian_rating_1_to_5, reputation_score_0_to_1, is_new).
+        No penaliza a nuevos vecinos (les asigna línea base justa de 4.2 estrellas / 0.84).
         """
         if reviews_count == 0:
-            # Nuevo en VeciRed: no penalizar, otorgar línea base justa (4.0 estrellas / 0.70 score)
-            return prior_mean, 0.70, True
+            return prior_mean, 0.84, True
 
         v = float(reviews_count)
         r = float(rating_avg)
@@ -162,12 +170,12 @@ class SearchService:
         reputation_score = bayesian_rating / 5.0
         return round(bayesian_rating, 2), round(min(1.0, max(0.1, reputation_score)), 3), False
 
-    def _calculate_experience_score(self, completed_interactions: int) -> float:
-        """Puntúa la experiencia comprobada evitando penalizar a nuevos vecinos."""
-        if completed_interactions <= 0:
-            return 0.40  # Nuevo vecino
-        # 1 trabajo = 0.46 | 5 trabajos = 0.70 | 10+ trabajos = 1.0
-        score = 0.40 + 0.06 * min(10, completed_interactions)
+    def _calculate_experience_score(self, completed_interactions: int, is_new: bool = False) -> float:
+        """Puntúa la experiencia comprobada sin penalizar a nuevos vecinos."""
+        if is_new or completed_interactions <= 0:
+            return 0.70  # Línea base positiva para nuevos vecinos
+        # 1 trabajo = 0.73 | 5 trabajos = 0.85 | 10+ trabajos = 1.0
+        score = 0.70 + 0.03 * min(10, completed_interactions)
         return round(min(1.0, score), 3)
 
     # ------------------------------------------------------------------
@@ -195,7 +203,7 @@ class SearchService:
         ranked: List[ServiceSearchResult] = []
 
         for item in raw_items:
-            dist_km, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -218,19 +226,25 @@ class SearchService:
             )
 
             completed = item["reviews_count"] + item["provider_helped_count"]
-            exp_score = self._calculate_experience_score(completed)
+            exp_score = self._calculate_experience_score(completed, is_new=is_new)
 
-            # Fórmula: 40% Coincidencia, 25% Cercanía, 25% Reputación, 10% Experiencia
+            # Ponderación requerida:
+            # 55% Proximidad
+            # 25% Relevancia
+            # 15% Reputación
+            # 5% Experiencia
             final_score = (
-                0.40 * match_score
-                + 0.25 * dist_score
-                + 0.25 * rep_score
-                + 0.10 * exp_score
+                0.55 * dist_score
+                + 0.25 * match_score
+                + 0.15 * rep_score
+                + 0.05 * exp_score
             )
 
             if item["ai_score"] is not None:
-                final_score = min(1.0, final_score + 0.05 * item["ai_score"])
+                final_score = min(1.0, final_score + 0.03 * item["ai_score"])
 
+            final_score = min(1.0, max(0.0, final_score))
+            score_val = round(final_score, 4)
             is_verified = item["provider_status"] in ("verified", "active")
 
             ranked.append(
@@ -255,16 +269,20 @@ class SearchService:
                     bayesian_rating=bayes_rating,
                     completed_interactions=completed,
                     distance_km=dist_km,
+                    distance_meters=dist_meters,
                     community_id=item["community_id"],
                     community_name=item["community_name"],
                     district_name=item["district_name"],
-                    ranking_score=round(final_score, 3),
+                    score=score_val,
+                    ranking_score=score_val,
                     score_breakdown={
                         "match_score": match_score,
                         "distance_score": dist_score,
                         "reputation_score": rep_score,
                         "experience_score": exp_score,
-                        "final_score": round(final_score, 3),
+                        "distance_meters": dist_meters,
+                        "final_score": score_val,
+                        "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 15% rep, 5% exp",
                     },
                     created_at=item["created_at"],
                 )
@@ -320,7 +338,7 @@ class SearchService:
         ranked: List[ProductSearchResult] = []
 
         for item in raw_items:
-            dist_km, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -341,18 +359,20 @@ class SearchService:
                 item["reviews_count"], item["rating_avg"]
             )
 
-            # Regla de productos: 45% Coincidencia, 30% Cercanía, 15% Reputación, 10% Experiencia
-            exp_score = self._calculate_experience_score(item["reviews_count"])
+            exp_score = self._calculate_experience_score(item["reviews_count"], is_new=is_new)
+            # Ponderación requerida: 55% Proximidad, 25% Relevancia, 15% Reputación, 5% Experiencia
             final_score = (
-                0.45 * match_score
-                + 0.30 * dist_score
+                0.55 * dist_score
+                + 0.25 * match_score
                 + 0.15 * rep_score
-                + 0.10 * exp_score
+                + 0.05 * exp_score
             )
 
             if item["ai_score"] is not None:
-                final_score = min(1.0, final_score + 0.05 * item["ai_score"])
+                final_score = min(1.0, final_score + 0.03 * item["ai_score"])
 
+            final_score = min(1.0, max(0.0, final_score))
+            score_val = round(final_score, 4)
             is_verified = item["owner_status"] in ("verified", "active")
 
             ranked.append(
@@ -375,15 +395,19 @@ class SearchService:
                     reviews_count=item["reviews_count"],
                     bayesian_rating=bayes_rating,
                     distance_km=dist_km,
+                    distance_meters=dist_meters,
                     community_name=item["community_name"],
                     district_name=item["district_name"],
-                    ranking_score=round(final_score, 3),
+                    score=score_val,
+                    ranking_score=score_val,
                     score_breakdown={
                         "match_score": match_score,
                         "distance_score": dist_score,
                         "reputation_score": rep_score,
                         "experience_score": exp_score,
-                        "final_score": round(final_score, 3),
+                        "distance_meters": dist_meters,
+                        "final_score": score_val,
+                        "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 15% rep, 5% exp",
                     },
                     created_at=item["created_at"],
                 )
@@ -437,7 +461,7 @@ class SearchService:
         ranked: List[SolidaritySearchResult] = []
 
         for item in raw_items:
-            dist_km, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -459,12 +483,14 @@ class SearchService:
             status_weight = 1.0 if item["status"] in ("open", "active") else 0.40
             urgency_score = round(type_weight * status_weight, 3)
 
-            # Fórmula Solidaridad: 45% Coincidencia, 35% Cercanía, 20% Urgencia
+            # Fórmula Solidaridad: 55% Proximidad, 25% Coincidencia, 20% Urgencia
             final_score = (
-                0.45 * match_score
-                + 0.35 * dist_score
+                0.55 * dist_score
+                + 0.25 * match_score
                 + 0.20 * urgency_score
             )
+            final_score = min(1.0, max(0.0, final_score))
+            score_val = round(final_score, 4)
 
             is_verified = item["author_status"] in ("verified", "active")
 
@@ -482,14 +508,18 @@ class SearchService:
                     is_verified=is_verified,
                     is_urgent=is_urgent,
                     distance_km=dist_km,
+                    distance_meters=dist_meters,
                     community_name=item["community_name"],
                     district_name=item["district_name"],
-                    ranking_score=round(final_score, 3),
+                    score=score_val,
+                    ranking_score=score_val,
                     score_breakdown={
                         "match_score": match_score,
                         "distance_score": dist_score,
                         "urgency_score": urgency_score,
-                        "final_score": round(final_score, 3),
+                        "distance_meters": dist_meters,
+                        "final_score": score_val,
+                        "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 20% urgencia",
                     },
                     created_at=item["created_at"],
                 )
@@ -558,7 +588,7 @@ class SearchService:
         }
 
         for item in raw_items:
-            dist_km, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -575,19 +605,21 @@ class SearchService:
                 continue
 
             sev_val = str(item["severity"]).lower()
-            sev_score = SEVERITY_WEIGHTS.get(sev_val, 0.50)
+            sev_score = SEVERITY_WEIGHTS.get(sev_val, 0.40)
 
             stat_val = str(item["status"]).lower()
-            stat_score = STATUS_WEIGHTS.get(stat_val, 0.50)
+            stat_score = STATUS_WEIGHTS.get(stat_val, 0.40)
 
             severity_composite = round(sev_score * 0.70 + stat_score * 0.30, 3)
 
-            # Fórmula Emergencias: 45% Gravedad/Estado, 35% Cercanía, 20% Coincidencia
+            # Fórmula Emergencias: 50% Gravedad/Estado, 35% Cercanía, 15% Coincidencia
             final_score = (
-                0.45 * severity_composite
+                0.50 * severity_composite
                 + 0.35 * dist_score
-                + 0.20 * match_score
+                + 0.15 * match_score
             )
+            final_score = min(1.0, max(0.0, final_score))
+            score_val = round(final_score, 4)
 
             ranked.append(
                 EmergencySearchResult(
@@ -601,14 +633,18 @@ class SearchService:
                     reporter_name=item["reporter_name"],
                     occurred_at=item["occurred_at"],
                     distance_km=dist_km,
+                    distance_meters=dist_meters,
                     community_name=item["community_name"],
                     district_name=item["district_name"],
-                    ranking_score=round(final_score, 3),
+                    score=score_val,
+                    ranking_score=score_val,
                     score_breakdown={
                         "severity_score": severity_composite,
                         "distance_score": dist_score,
                         "match_score": match_score,
-                        "final_score": round(final_score, 3),
+                        "distance_meters": dist_meters,
+                        "final_score": score_val,
+                        "algorithm_notes": f"50% gravedad ({item['severity']}), 35% prox ({dist_meters}m), 15% rel",
                     },
                     created_at=item["created_at"],
                 )
@@ -616,9 +652,17 @@ class SearchService:
 
         # Para emergencias por defecto ordenar por gravedad/score
         if sort == SearchSort.DISTANCE:
-            ranked.sort(key=lambda x: (x.distance_km is None, x.distance_km or 9999.0))
+            ranked.sort(key=lambda x: (x.distance_meters is None, x.distance_meters or 9999999.0, -x.score))
         else:
-            ranked.sort(key=lambda x: x.ranking_score, reverse=True)
+            # RECOMMENDED: Críticas activas conservan máxima prioridad, priorizando cercanía dentro de cada nivel
+            ranked.sort(
+                key=lambda x: (
+                    -round(x.score_breakdown.get("severity_score", 0.0) if x.score_breakdown else 0.0, 2),
+                    x.distance_meters is None,
+                    x.distance_meters or 9999999.0,
+                    -x.score,
+                )
+            )
 
         total = len(ranked)
         skip = (page - 1) * page_size
@@ -721,11 +765,13 @@ class SearchService:
                     badge="Verificado" if s.is_verified else ("Nuevo" if s.is_new else None),
                     price_label=price_str,
                     distance_km=s.distance_km,
+                    distance_meters=s.distance_meters,
                     location_label=s.district_name or s.community_name,
                     rating=s.rating_avg if s.reviews_count > 0 else None,
                     reviews_count=s.reviews_count,
                     is_new=s.is_new,
                     is_verified=s.is_verified,
+                    score=s.score,
                     ranking_score=s.ranking_score,
                     score_breakdown=s.score_breakdown,
                     detail_path=f"/services/{s.id}",
@@ -746,11 +792,13 @@ class SearchService:
                     badge="En Stock" if (p.stock is None or p.stock > 0) else "Agotado",
                     price_label=f"S/ {p.price}",
                     distance_km=p.distance_km,
+                    distance_meters=p.distance_meters,
                     location_label=p.district_name or p.community_name,
                     rating=p.rating_avg if p.reviews_count > 0 else None,
                     reviews_count=p.reviews_count,
                     is_new=p.is_new,
                     is_verified=p.is_verified,
+                    score=p.score,
                     ranking_score=p.ranking_score,
                     score_breakdown=p.score_breakdown,
                     detail_path=f"/products/{p.id}",
@@ -772,11 +820,13 @@ class SearchService:
                     badge="URGENTE" if sol.is_urgent else "Muro Comunal",
                     price_label="Gratuito",
                     distance_km=sol.distance_km,
+                    distance_meters=sol.distance_meters,
                     location_label=sol.district_name or sol.community_name,
                     rating=None,
                     reviews_count=None,
                     is_new=False,
                     is_verified=sol.is_verified,
+                    score=sol.score,
                     ranking_score=sol.ranking_score,
                     score_breakdown=sol.score_breakdown,
                     detail_path=f"/solidarity/posts/{sol.id}",
@@ -797,11 +847,13 @@ class SearchService:
                     badge=f"Severidad: {emg.severity.upper()}",
                     price_label="Emergencia Activa",
                     distance_km=emg.distance_km,
+                    distance_meters=emg.distance_meters,
                     location_label=emg.district_name or emg.community_name,
                     rating=None,
                     reviews_count=None,
                     is_new=False,
                     is_verified=True,
+                    score=emg.score,
                     ranking_score=emg.ranking_score,
                     score_breakdown=emg.score_breakdown,
                     detail_path=f"/emergencies/{emg.id}",
@@ -810,9 +862,23 @@ class SearchService:
 
         # Ordenar lista consolidada
         if sort == SearchSort.DISTANCE:
-            unified_list.sort(key=lambda x: (x.distance_km is None, x.distance_km or 9999.0))
+            unified_list.sort(key=lambda x: (x.distance_meters is None, x.distance_meters or 9999999.0, -x.score))
         else:
-            unified_list.sort(key=lambda x: x.ranking_score, reverse=True)
+            # RECOMMENDED: Emergencias críticas activas conservan máxima prioridad;
+            # el resto se ordena principalmente por cercanía y score
+            def unified_sort_key(item: UnifiedSearchResultItem):
+                is_crit_emergency = (
+                    item.module == "emergencies"
+                    and "CRITICAL" in (item.badge or "").upper()
+                )
+                return (
+                    not is_crit_emergency,  # 0 para emergencias críticas, 1 para el resto
+                    -round(item.score, 2),
+                    item.distance_meters is None,
+                    item.distance_meters or 9999999.0,
+                    -item.score,
+                )
+            unified_list.sort(key=unified_sort_key)
 
         total = len(unified_list)
         skip = (page - 1) * page_size
@@ -849,23 +915,32 @@ class SearchService:
     def _sort_items(self, items: List[Any], sort: SearchSort) -> None:
         """Aplica la estrategia de ordenamiento sobre los resultados rankeados."""
         if sort == SearchSort.DISTANCE:
-            # Primero con distancia conocida ascendente, luego sin coordenadas
-            items.sort(key=lambda x: (x.distance_km is None, x.distance_km or 9999.0, -x.ranking_score))
+            # Estrictamente por distancia ascendente en metros
+            items.sort(
+                key=lambda x: (
+                    x.distance_meters is None,
+                    x.distance_meters or 9999999.0,
+                    -getattr(x, "score", 0.0),
+                )
+            )
         elif sort == SearchSort.RELEVANCE:
-            # Primero mayor coincidencia de búsqueda, luego proximidad
+            # Mayor coincidencia textual, luego proximidad
             items.sort(
                 key=lambda x: (
                     -(x.score_breakdown.get("match_score", 0.0) if x.score_breakdown else 0.0),
-                    x.distance_km is None,
-                    x.distance_km or 9999.0,
-                    -x.ranking_score,
+                    -round(getattr(x, "score", 0.0), 2),
+                    x.distance_meters is None,
+                    x.distance_meters or 9999999.0,
                 )
             )
         else:  # RECOMMENDED
+            # Proximidad (55%) + Relevancia (25%) + Reputación (15%) + Experiencia (5%)
+            # Si dos vecinos tienen puntuaciones similares, prioriza al más cercano
             items.sort(
                 key=lambda x: (
-                    -x.ranking_score,
-                    x.distance_km is None,
-                    x.distance_km or 9999.0,
+                    -round(getattr(x, "score", 0.0), 2),
+                    x.distance_meters is None,
+                    x.distance_meters or 9999999.0,
+                    -getattr(x, "score", 0.0),
                 )
             )

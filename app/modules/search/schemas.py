@@ -15,11 +15,12 @@ class SearchSort(str, Enum):
 
 class ScoreBreakdown(BaseModel):
     """Desglose transparente y documentado del ranking multidimensional."""
-    match_score: float = Field(..., description="Puntuación de coincidencia textual (0.0 a 1.0, peso 40%)")
-    distance_score: float = Field(..., description="Puntuación de proximidad barrial (0.0 a 1.0, peso 25%)")
-    reputation_score: float = Field(..., description="Puntuación bayesiana de reputación (0.0 a 1.0, peso 25%)")
-    experience_score: float = Field(..., description="Puntuación de experiencia comprobada (0.0 a 1.0, peso 10%)")
+    match_score: float = Field(..., description="Puntuación de coincidencia textual (0.0 a 1.0, peso 25%)")
+    distance_score: float = Field(..., description="Puntuación de proximidad barrial (0.0 a 1.0, peso 55%)")
+    reputation_score: float = Field(..., description="Puntuación bayesiana de reputación (0.0 a 1.0, peso 15%)")
+    experience_score: float = Field(..., description="Puntuación de experiencia comprobada (0.0 a 1.0, peso 5%)")
     final_score: float = Field(..., description="Puntuación consolidada normalizada (0.0 a 1.0)")
+    distance_meters: Optional[float] = Field(None, description="Distancia real en metros")
     algorithm_notes: Optional[str] = Field(None, description="Observaciones del algoritmo")
 
 
@@ -47,9 +48,11 @@ class ServiceSearchResult(BaseModel):
     bayesian_rating: float = 4.0
     completed_interactions: int = 0
     distance_km: Optional[float] = None
+    distance_meters: Optional[float] = None
     community_id: Optional[uuid.UUID] = None
     community_name: Optional[str] = None
     district_name: Optional[str] = None
+    score: float = 0.0
     ranking_score: float = 0.0
     score_breakdown: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
@@ -79,8 +82,10 @@ class ProductSearchResult(BaseModel):
     reviews_count: int = 0
     bayesian_rating: float = 4.0
     distance_km: Optional[float] = None
+    distance_meters: Optional[float] = None
     community_name: Optional[str] = None
     district_name: Optional[str] = None
+    score: float = 0.0
     ranking_score: float = 0.0
     score_breakdown: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
@@ -104,8 +109,10 @@ class SolidaritySearchResult(BaseModel):
     is_verified: bool = False
     is_urgent: bool = False
     distance_km: Optional[float] = None
+    distance_meters: Optional[float] = None
     community_name: Optional[str] = None
     district_name: Optional[str] = None
+    score: float = 0.0
     ranking_score: float = 0.0
     score_breakdown: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
@@ -127,8 +134,10 @@ class EmergencySearchResult(BaseModel):
     reporter_name: Optional[str] = None
     occurred_at: Optional[datetime] = None
     distance_km: Optional[float] = None
+    distance_meters: Optional[float] = None
     community_name: Optional[str] = None
     district_name: Optional[str] = None
+    score: float = 0.0
     ranking_score: float = 0.0
     score_breakdown: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
@@ -151,11 +160,13 @@ class UnifiedSearchResultItem(BaseModel):
     badge: Optional[str] = None
     price_label: Optional[str] = None
     distance_km: Optional[float] = None
+    distance_meters: Optional[float] = None
     location_label: Optional[str] = None
     rating: Optional[float] = None
     reviews_count: Optional[int] = None
     is_new: bool = False
     is_verified: bool = False
+    score: float
     ranking_score: float
     score_breakdown: Optional[Dict[str, Any]] = None
     detail_path: str

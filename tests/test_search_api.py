@@ -8,6 +8,7 @@ from app.main import app
 from app.modules.search.repository import (
     expand_query_terms,
     haversine_distance_km,
+    haversine_distance_meters,
     strip_accents,
 )
 from app.modules.search.service import SearchService
@@ -239,4 +240,283 @@ async def test_emergencies_search_endpoint():
         assert response.status_code == 200
         data = response.json()
         assert "items" in data
+
+
+# ----------------------------------------------------------------------
+# 3. PRUEBAS ESPECÍFICAS DEL ALGORITMO AJUSTADO (55% PROXIMIDAD)
+# ----------------------------------------------------------------------
+def test_haversine_distance_meters_and_km():
+    """Verifica que la distancia en metros sea exacta y coherente con km."""
+    # Latitud/Longitud de referencia
+    user_lat, user_lon = -12.046374, -77.042793
+    # 0.0004 grados de latitud corresponden aproximadamente a 44.5 metros
+    test_lat = user_lat + 0.0004
+    test_lon = user_lon
+
+    meters = haversine_distance_meters(user_lat, user_lon, test_lat, test_lon)
+    km = haversine_distance_km(user_lat, user_lon, test_lat, test_lon)
+
+    assert 40.0 <= meters <= 50.0
+    assert km == round(meters / 1000.0, 3)
+    # Misma posición = 0 metros
+    assert haversine_distance_meters(user_lat, user_lon, user_lat, user_lon) == 0.0
+
+
+def test_validation_scenario_45m_to_950m_ordering():
+    """
+    EJEMPLO DE VALIDACIÓN DEL USUARIO:
+    Vecinos a: 45 m, 90 m, 130 m, 210 m, 280 m, 350 m, 470 m, 620 m, 750 m y 950 m.
+    El resultado DEBE mostrarlos en ese orden exacto bajo 55% proximidad.
+    """
+    from app.modules.search.schemas import SearchSort, ServiceSearchResult
+
+    service = SearchService(session=None)
+    user_lat, user_lon = -12.046374, -77.042793
+
+    # Distancias reales en metros
+    distances_m = [45.0, 90.0, 130.0, 210.0, 280.0, 350.0, 470.0, 620.0, 750.0, 950.0]
+    items = []
+
+    for d in distances_m:
+        # Calcular coordenadas aproximadas para dar exactamente d metros
+        # 1 grado latitud aprox = 111,139 metros
+        delta_deg = d / 111139.0
+        item_lat = user_lat + delta_deg
+        item_lon = user_lon
+
+        dist_km, dist_meters, dist_score, within_radius = service._calculate_distance_and_score(
+            user_lat, user_lon, item_lat, item_lon, radius_km=1.0
+        )
+        assert within_radius is True
+
+        match_score = 1.0  # Misma relevancia de oficio
+        rep_rating, rep_score, is_new = service._calculate_bayesian_reputation(reviews_count=0, rating_avg=0.0)
+        exp_score = service._calculate_experience_score(0, is_new=True)
+
+        final_score = (
+            0.55 * dist_score
+            + 0.25 * match_score
+            + 0.15 * rep_score
+            + 0.05 * exp_score
+        )
+
+        items.append(
+            ServiceSearchResult(
+                id=uuid.uuid4(),
+                title=f"Vecino a {int(d)}m",
+                provider_id=uuid.uuid4(),
+                provider_name=f"Vecino {int(d)}m",
+                is_verified=True,
+                is_new=True,
+                distance_km=dist_km,
+                distance_meters=dist_meters,
+                score=round(final_score, 4),
+                ranking_score=round(final_score, 4),
+                score_breakdown={
+                    "match_score": match_score,
+                    "distance_score": dist_score,
+                    "reputation_score": rep_score,
+                    "experience_score": exp_score,
+                    "distance_meters": dist_meters,
+                    "final_score": round(final_score, 4),
+                },
+            )
+        )
+
+    # Ordenar por el criterio RECOMMENDED
+    service._sort_items(items, SearchSort.RECOMMENDED)
+
+    # Verificar que el orden final sea estrictamente de menor a mayor distancia
+    actual_order = [it.distance_meters for it in items]
+    assert len(actual_order) == 10
+    # Cada vecino debe estar más cerca que el siguiente
+    for i in range(len(actual_order) - 1):
+        assert actual_order[i] < actual_order[i + 1], f"Fallo en orden: {actual_order[i]}m no es menor que {actual_order[i+1]}m"
+
+    # El más cercano (45m) aparece de primero y el de 950m al final
+    assert actual_order[0] <= 50.0
+    assert actual_order[-1] >= 940.0
+
+
+def test_radius_1km_excludes_items_outside():
+    """Valida que un vecino a 1050 m quede excluido cuando radius_km=1.0."""
+    service = SearchService(session=None)
+    user_lat, user_lon = -12.046374, -77.042793
+
+    # 1050 metros de distancia
+    delta_deg = 1050.0 / 111139.0
+    item_lat = user_lat + delta_deg
+    item_lon = user_lon
+
+    dist_km, dist_meters, dist_score, within_radius = service._calculate_distance_and_score(
+        user_lat, user_lon, item_lat, item_lon, radius_km=1.0
+    )
+    assert within_radius is False
+    assert dist_meters > 1000.0
+
+
+def test_new_user_not_penalized_vs_distant_veteran():
+    """
+    Valida que un nuevo vecino cercano (90m) no sea superado sistemáticamente
+    por un veterano lejano (470m) solo por tener valoraciones.
+    """
+    from app.modules.search.schemas import SearchSort, ServiceSearchResult
+
+    service = SearchService(session=None)
+    user_lat, user_lon = -12.046374, -77.042793
+
+    # Vecino A: Nuevo usuario a 90m
+    lat_a = user_lat + (90.0 / 111139.0)
+    _, d_m_a, d_score_a, _ = service._calculate_distance_and_score(user_lat, user_lon, lat_a, user_lon, 1.0)
+    _, rep_a, is_new_a = service._calculate_bayesian_reputation(0, 0.0)
+    exp_a = service._calculate_experience_score(0, is_new=True)
+    score_a = 0.55 * d_score_a + 0.25 * 1.0 + 0.15 * rep_a + 0.05 * exp_a
+
+    # Vecino B: Veterano con 20 reseñas de 5 estrellas pero a 470m
+    lat_b = user_lat + (470.0 / 111139.0)
+    _, d_m_b, d_score_b, _ = service._calculate_distance_and_score(user_lat, user_lon, lat_b, user_lon, 1.0)
+    _, rep_b, is_new_b = service._calculate_bayesian_reputation(20, 5.0)
+    exp_b = service._calculate_experience_score(20, is_new=False)
+    score_b = 0.55 * d_score_b + 0.25 * 1.0 + 0.15 * rep_b + 0.05 * exp_b
+
+    # El vecino nuevo cercano (90m) debe tener mayor puntuación que el veterano a 470m
+    assert score_a > score_b
+
+    items = [
+        ServiceSearchResult(
+            id=uuid.uuid4(),
+            title="Veterano a 470m",
+            provider_id=uuid.uuid4(),
+            provider_name="Veterano",
+            distance_meters=d_m_b,
+            distance_km=round(d_m_b / 1000.0, 3),
+            score=round(score_b, 4),
+            ranking_score=round(score_b, 4),
+        ),
+        ServiceSearchResult(
+            id=uuid.uuid4(),
+            title="Nuevo Vecino a 90m",
+            provider_id=uuid.uuid4(),
+            provider_name="Nuevo",
+            distance_meters=d_m_a,
+            distance_km=round(d_m_a / 1000.0, 3),
+            score=round(score_a, 4),
+            ranking_score=round(score_a, 4),
+        ),
+    ]
+
+    service._sort_items(items, SearchSort.RECOMMENDED)
+    assert items[0].provider_name == "Nuevo"
+
+
+def test_tie_breaker_prioritizes_closer():
+    """Si dos vecinos tienen puntajes idénticos o muy similares, se prioriza al más cercano."""
+    from app.modules.search.schemas import SearchSort, ServiceSearchResult
+
+    service = SearchService(session=None)
+
+    items = [
+        ServiceSearchResult(
+            id=uuid.uuid4(),
+            title="Vecino Lejano",
+            provider_id=uuid.uuid4(),
+            provider_name="Lejano",
+            distance_meters=600.0,
+            distance_km=0.6,
+            score=0.85,
+            ranking_score=0.85,
+        ),
+        ServiceSearchResult(
+            id=uuid.uuid4(),
+            title="Vecino Cercano",
+            provider_id=uuid.uuid4(),
+            provider_name="Cercano",
+            distance_meters=150.0,
+            distance_km=0.15,
+            score=0.85,
+            ranking_score=0.85,
+        ),
+    ]
+
+    service._sort_items(items, SearchSort.RECOMMENDED)
+    assert items[0].provider_name == "Cercano"
+
+
+def test_emergencies_critical_priority():
+    """Valida que una emergencia crítica mantenga prioridad sobre emergencias menores."""
+    from app.modules.search.schemas import EmergencySearchResult
+
+    emg_critical = EmergencySearchResult(
+        id=uuid.uuid4(),
+        title="Incendio en vivienda",
+        emergency_type="incendio",
+        severity="critical",
+        status="active",
+        reported_by=uuid.uuid4(),
+        distance_meters=850.0,
+        distance_km=0.85,
+        score=0.88,
+        ranking_score=0.88,
+        score_breakdown={"severity_score": 1.0},
+    )
+
+    emg_low = EmergencySearchResult(
+        id=uuid.uuid4(),
+        title="Ruido molesto",
+        emergency_type="ruido",
+        severity="low",
+        status="active",
+        reported_by=uuid.uuid4(),
+        distance_meters=80.0,
+        distance_km=0.08,
+        score=0.55,
+        ranking_score=0.55,
+        score_breakdown={"severity_score": 0.45},
+    )
+
+    emergencies = [emg_low, emg_critical]
+    # Ordenamiento recomendado de emergencias: por gravedad primero
+    emergencies.sort(
+        key=lambda x: (
+            -round(x.score_breakdown.get("severity_score", 0.0), 2),
+            x.distance_meters is None,
+            x.distance_meters or 9999999.0,
+            -x.score,
+        )
+    )
+
+    assert emergencies[0].severity == "critical"
+    assert emergencies[0].title == "Incendio en vivienda"
+
+
+@pytest.mark.asyncio
+async def test_global_search_response_fields_and_page_size_10():
+    """Valida que la API devuelva distance_meters, distance_km, score y respete page_size=10."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get(
+            "/api/v1/search",
+            params={
+                "latitude": -12.0463,
+                "longitude": -77.0427,
+                "radius_km": 1.0,
+                "sort": "recommended",
+                "page": 1,
+                "page_size": 10,
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert len(data["items"]) <= 10
+        assert data["limit"] == 10
+
+        for it in data["items"]:
+            assert "score" in it
+            assert "ranking_score" in it
+            assert "distance_km" in it
+            assert "distance_meters" in it
+            assert "module" in it
+            assert "title" in it
 

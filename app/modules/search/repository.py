@@ -79,17 +79,26 @@ def expand_query_terms(query: Optional[str]) -> List[str]:
     return list(expanded)
 
 
-def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calcula la distancia real en kilómetros usando la fórmula del semiverseno (Haversine)."""
-    R = 6371.0
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
+def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calcula la distancia real en metros usando la fórmula del semiverseno (Haversine)."""
+    R = 6371000.0  # Radio terrestre medio en metros
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
     a = (
-        math.sin(dlat / 2.0) ** 2
-        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2.0) ** 2
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
     )
-    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1.0 - a)))
-    return round(R * c, 2)
+    c = 2.0 * math.atan2(math.sqrt(min(1.0, max(0.0, a))), math.sqrt(min(1.0, max(0.0, 1.0 - a))))
+    return round(R * c, 1)
+
+
+def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calcula la distancia real en kilómetros con resolución métrica."""
+    meters = haversine_distance_meters(lat1, lon1, lat2, lon2)
+    return round(meters / 1000.0, 3)
 
 
 class SearchRepository:
