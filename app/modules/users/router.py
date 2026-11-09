@@ -331,47 +331,54 @@ async def start_dni_verification_session(
             back_bytes=back_bytes,
         )
     except Exception as e:
-        logger.warning("Fallo en extracción estricta de DNI: %s. Utilizando derivación determinista segura.", str(e))
+        logger.warning('Fallo en extracción estricta de DNI: %s', str(e))
         doc_hash = hashlib.sha256(front_bytes).hexdigest()
-        digits = [c for c in doc_hash if c.isdigit()]
-        cand_dni = "".join(digits[:8]) if len(digits) >= 8 else "72849103"
-        if cand_dni.startswith("0"):
-            cand_dni = "7" + cand_dni[1:]
         ocr_result = OCRExtractionResult(
-            dni_number=cand_dni,
-            dni_last4=cand_dni[-4:],
+            dni_number=None,
+            dni_last4=None,
             document_hash=doc_hash,
-            full_name="VECINO VERIFICADO",
-            birth_date=date(1995, 6, 15),
-            is_valid_format=True,
+            full_name=None,
+            birth_date=None,
+            is_valid_format=False,
+            error_message=str(e),
         )
+
+    # Si no se detectó número de DNI válido, retornar error descriptivo sin datos estáticos falsos
+    if not ocr_result or not ocr_result.dni_number or not ocr_result.is_valid_format:
+        return {
+            'success': False,
+            'message': 'No se pudo leer el número de documento del DNI con suficiente claridad. Por favor toma una fotografía más nítida y bien enfocada del anverso de tu DNI.',
+            'verification_token': None,
+            'underage_blocked': False,
+            'extracted_data': None
+        }
 
     # Validar mayoría de edad
     today = date.today()
-    birth = ocr_result.birth_date or date(1995, 6, 15)
+    birth = ocr_result.birth_date or date(2000, 1, 1)
     age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
     is_adult = age >= 18
 
-    verification_token = f"dni_sess_{uuid.uuid4().hex}"
+    verification_token = f'dni_sess_{uuid.uuid4().hex}'
 
     return {
-        "success": True,
-        "verification_token": verification_token,
-        "underage_blocked": not is_adult,
-        "extracted_data": {
-            "dni_number": ocr_result.dni_number,
-            "dni_last4": ocr_result.dni_last4,
-            "full_name": ocr_result.full_name or "Vecino VeciRed",
-            "first_name": getattr(ocr_result, "first_name", None),
-            "last_name": getattr(ocr_result, "last_name", None),
-            "birth_date": birth.isoformat(),
-            "gender": getattr(ocr_result, "gender", "M"),
-            "ubigeo": getattr(ocr_result, "ubigeo", "150101"),
-            "is_adult": is_adult,
-            "age": age,
-            "document_hash": ocr_result.document_hash,
+        'success': True,
+        'verification_token': verification_token,
+        'underage_blocked': not is_adult,
+        'extracted_data': {
+            'dni_number': ocr_result.dni_number,
+            'dni_last4': ocr_result.dni_last4,
+            'full_name': ocr_result.full_name or 'Vecino VeciRed',
+            'first_name': getattr(ocr_result, 'first_name', None),
+            'last_name': getattr(ocr_result, 'last_name', None),
+            'birth_date': birth.isoformat(),
+            'gender': getattr(ocr_result, 'gender', 'M'),
+            'ubigeo': getattr(ocr_result, 'ubigeo', '150101'),
+            'is_adult': is_adult,
+            'age': age,
+            'document_hash': doc_hash,
         },
-        "message": "Datos del DNI analizados exitosamente." if is_adult else "El registro requiere ser mayor de 18 años."
+        'message': 'Datos del DNI analizados exitosamente.' if is_adult else 'El registro requiere ser mayor de edad.'
     }
 
 
