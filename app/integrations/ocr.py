@@ -244,7 +244,9 @@ class DNIOCRService:
             "TARJETA", "DIRECCIÓN", "DIRECCION", "DEPARTAMENTO", "PROVINCIA", "DISTRITO",
             "CUARTO", "NIVEL", "UBIGEO", "GRUPO", "VOTACIÓN", "VOTACION", "DONACIÓN", "DONACION",
             "ÓRGANOS", "ORGANOS", "FACTOR", "SANGUÍNEO", "SANGUINEO", "JEFA", "CONST", "VECIRED",
-            "MASCULINO", "FEMENINO", "CML", "PTR", "SOE", "NRO", "URB", "COLINA", "JR", "MZ", "LT"
+            "MASCULINO", "FEMENINO", "CML", "PTR", "SOE", "NRO", "URB", "COLINA", "JR", "MZ", "LT",
+            "MAYORÍA", "MAYORIA", "EDAD", "CONFIRMADA", "SESIÓN", "SESION", "TEMPORAL", "ACTIVA",
+            "CONTINUAR", "VERIFICACIÓN", "VERIFICACION", "FACIAL", "PASO", "VALIDADO", "CLAUDE", "VISION"
         }
 
         dni_number = None
@@ -318,7 +320,7 @@ class DNIOCRService:
                     if not words and i + 1 < len(lines):
                         words = [w for w in lines[i+1].upper().split() if w.isalpha() and len(w) > 2 and w not in STOPWORDS]
                     if words:
-                        last_name = " ".join(words)
+                        last_name = " ".join(words[:2])
 
                 if re.search(r'\b(PRE\s*NOMBRES?|PRENOMBRES?|NOMBRES?)\b', lu) and not first_name:
                     cand = re.sub(r'.*?\b(PRE\s*NOMBRES?|PRENOMBRES?|NOMBRES?)\b[:\- ]*', '', lu).strip()
@@ -326,7 +328,7 @@ class DNIOCRService:
                     if not words and i + 1 < len(lines):
                         words = [w for w in lines[i+1].upper().split() if w.isalpha() and len(w) > 2 and w not in STOPWORDS]
                     if words:
-                        first_name = " ".join(words)
+                        first_name = " ".join(words[:3])
 
         # C) Casos verificados de prueba
         if dni_number == "61087637" or "61087637" in compact_text:
@@ -396,6 +398,10 @@ class DNIOCRService:
         if not full_name:
             full_name = f"{first_name or ''} {last_name or ''}".strip() or (fallback_name or "Vecino VeciRed")
 
+        calculated_age = calculate_age(birth_date) if birth_date else None
+        is_adult = calculated_age >= 18 if calculated_age is not None else True
+        underage_blocked = bool(calculated_age is not None and calculated_age < 18)
+
         return OCRExtractionResult(
             dni_number=dni_number,
             dni_last4=dni_number[-4:] if dni_number else None,
@@ -404,6 +410,9 @@ class DNIOCRService:
             first_name=first_name,
             last_name=last_name,
             birth_date=birth_date,
+            age=calculated_age,
+            is_adult=is_adult,
+            underage_blocked=underage_blocked,
             gender=gender,
             ubigeo=ubigeo,
             confidence=0.92 if dni_number else 0.40,
