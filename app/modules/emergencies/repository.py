@@ -13,7 +13,7 @@ from app.modules.emergencies.models import (
     EmergencyContribution,
     EmergencyNeed,
 )
-from app.modules.geo.models import Community
+from app.modules.geo.models import Community, Address
 from app.modules.users.models import Profile
 
 
@@ -124,9 +124,13 @@ class EmergencyRepository:
                 Emergency.status,
                 Emergency.occurred_at,
                 Emergency.created_at,
+                Address.latitude,
+                Address.longitude,
+                Address.street_address.label("location"),
             )
             .outerjoin(Profile, Profile.id == Emergency.reported_by)
             .outerjoin(Community, Community.id == Emergency.community_id)
+            .outerjoin(Address, Address.id == Emergency.address_id)
             .where(Emergency.status.in_(["en_atencion", "reportada"]))
         )
         if community_id:
@@ -147,6 +151,10 @@ class EmergencyRepository:
                 d["community_name"] = "Zona A"
             d["volunteers_count"] = 0
             d["radius_m"] = 500
+            if d.get("latitude") is not None:
+                d["latitude"] = float(d["latitude"])
+            if d.get("longitude") is not None:
+                d["longitude"] = float(d["longitude"])
             items.append(d)
         return items
 
@@ -200,6 +208,12 @@ class EmergencyRepository:
         result["needs_count"] = 0
         return result
 
+    async def get_address_by_id(self, address_id: Optional[uuid.UUID]):
+        if not address_id:
+            return None
+        res = await self.session.execute(select(Address).where(Address.id == address_id))
+        return res.scalar_one_or_none()
+
     async def get_emergency_by_id(self, emergency_id: uuid.UUID) -> Optional[Emergency]:
         """Obtiene la entidad ORM de la emergencia."""
         stmt = select(Emergency).where(Emergency.id == emergency_id)
@@ -217,9 +231,28 @@ class EmergencyRepository:
         address_id: Optional[uuid.UUID] = None,
         alert_radius_m: Optional[int] = 500,
         image_url: Optional[str] = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        location: Optional[str] = None,
     ) -> Emergency:
         """Crea un nuevo reporte de emergencia comunitaria y genera la alerta barrial."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if address_id is None and latitude is not None and longitude is not None:
+            dist_res = await self.session.execute(text("SELECT id FROM districts LIMIT 1"))
+            dist_row = dist_res.fetchone()
+            dist_id = dist_row[0] if dist_row else 150101
+            new_addr = Address(
+                id=uuid.uuid4(),
+                district_id=dist_id,
+                street_address=location or "Ubicación reportada de auxilio",
+                latitude=Decimal(str(latitude)),
+                longitude=Decimal(str(longitude)),
+                created_at=now
+            )
+            self.session.add(new_addr)
+            await self.session.flush()
+            address_id = new_addr.id
+
         emg = Emergency(
             id=uuid.uuid4(),
             reported_by=reported_by,

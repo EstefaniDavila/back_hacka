@@ -61,6 +61,9 @@ class EmergencyCreate(BaseModel):
     address_id: Optional[uuid.UUID] = Field(None, description="ID de dirección específica si aplica")
     alert_radius_m: Optional[int] = Field(500, description="Radio de alerta en metros para notificación a vecinos")
     image_url: Optional[str] = Field(None, description="Foto o evidencia del accidente/suceso")
+    latitude: Optional[float] = Field(None, description="Latitud GPS exacta del suceso")
+    longitude: Optional[float] = Field(None, description="Longitud GPS exacta del suceso")
+    location: Optional[str] = Field(None, description="Referencia textual de dirección")
 
 
 class EmergencyStatusUpdate(BaseModel):
@@ -87,6 +90,9 @@ class EmergencyListItemResponse(BaseModel):
     needs_count: int = 0
     volunteers_count: int = 0
     radius_m: Optional[int] = 500
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    location: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 

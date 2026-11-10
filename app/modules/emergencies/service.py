@@ -95,6 +95,11 @@ class EmergencyService:
             for c in c_items:
                 contributions.append(EmergencyContributionResponse(**c))
 
+        addr = await self.repository.get_address_by_id(emg.address_id)
+        lat = float(addr.latitude) if addr and addr.latitude is not None else None
+        lng = float(addr.longitude) if addr and addr.longitude is not None else None
+        loc_str = addr.street_address if addr else None
+
         return EmergencyDetailResponse(
             id=emg.id,
             reported_by=emg.reported_by,
@@ -108,6 +113,10 @@ class EmergencyService:
             status=emg.status or "reportada",
             occurred_at=emg.occurred_at,
             created_at=emg.created_at,
+            image_url=emg.image_url,
+            latitude=lat,
+            longitude=lng,
+            location=loc_str,
             needs_count=len(needs),
             volunteers_count=4,
             radius_m=500,
@@ -137,6 +146,9 @@ class EmergencyService:
             address_id=data.address_id,
             alert_radius_m=data.alert_radius_m,
             image_url=data.image_url,
+            latitude=data.latitude,
+            longitude=data.longitude,
+            location=data.location,
         )
 
         # Sembrar necesidades por defecto para facilitar pruebas y uso inmediato

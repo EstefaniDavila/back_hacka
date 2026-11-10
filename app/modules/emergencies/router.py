@@ -257,11 +257,15 @@ async def broadcast_emergency_alert(
     summary="Listar evidencias fotográficas y reportes de vecinos para la alerta",
 )
 async def list_community_reports(
-    emergency_id: uuid.UUID,
+    emergency_id: str,
     service: EmergencyService = Depends(get_emergency_service),
 ):
     """Retorna el muro situacional y fotos subidas por brigadistas y vecinos."""
-    return await service.list_community_reports(emergency_id)
+    try:
+        eid = uuid.UUID(emergency_id)
+    except Exception:
+        eid = uuid.uuid5(uuid.NAMESPACE_DNS, str(emergency_id))
+    return await service.list_community_reports(eid)
 
 
 @router.post(
@@ -271,15 +275,19 @@ async def list_community_reports(
     summary="Publicar foto de evidencia o reporte situacional de la brigada",
 )
 async def create_community_report(
-    emergency_id: uuid.UUID,
+    emergency_id: str,
     data: CommunityReportCreate,
     current_user: Optional[CurrentUser] = Depends(get_current_user),
     service: EmergencyService = Depends(get_emergency_service),
 ):
     """Permite a cualquier vecino o brigadista subir fotos y reportes a la alerta."""
+    try:
+        eid = uuid.UUID(emergency_id)
+    except Exception:
+        eid = uuid.uuid5(uuid.NAMESPACE_DNS, str(emergency_id))
     user_id = current_user.id if current_user else None
     return await service.create_community_report(
-        emergency_id=emergency_id,
+        emergency_id=eid,
         user_id=user_id,
         author_name=data.author_name,
         author_avatar=data.author_avatar,
