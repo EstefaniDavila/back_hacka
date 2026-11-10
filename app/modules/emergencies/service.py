@@ -347,3 +347,17 @@ class EmergencyService:
             distance_m=distance_m,
             role_badge=role_badge
         )
+
+    async def delete_community_report(self, report_id: uuid.UUID) -> bool:
+        return await self.repository.delete_community_report(report_id)
+
+    async def update_community_report(
+        self,
+        report_id: uuid.UUID,
+        message: Optional[str],
+        image_url: Optional[str]
+    ) -> Dict[str, Any]:
+        res = await self.repository.update_community_report(report_id, message, image_url)
+        if not res:
+            raise EntityNotFoundException("Reporte de Emergencia", report_id)
+        return res

@@ -137,6 +137,10 @@ class CommunityReportCreate(BaseModel):
     role_badge: Optional[str] = Field("Brigadista en Escena", description="Distintivo del autor")
 
 
+class CommunityReportUpdate(BaseModel):
+    message: Optional[str] = Field(None, description="Nuevo texto del reporte")
+    image_url: Optional[str] = Field(None, description="Nueva URL o base64 de evidencia")
+
 class CommunityReportResponse(BaseModel):
     """Respuesta serializada de un reporte comunitario."""
     id: str

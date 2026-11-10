@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from app.core.security import CurrentUser, get_current_user
 from app.modules.emergencies.dependencies import get_emergency_service
 from app.modules.emergencies.schemas import (
-    CommunityReportCreate,
+    CommunityReportCreate, CommunityReportUpdate,
     CommunityReportResponse,
     VolunteerResponse,
     EmergencyContributionCreate,
@@ -276,7 +276,7 @@ async def list_community_reports(
 )
 async def create_community_report(
     emergency_id: str,
-    data: CommunityReportCreate,
+    data: CommunityReportCreate, CommunityReportUpdate,
     current_user: Optional[CurrentUser] = Depends(get_current_user),
     service: EmergencyService = Depends(get_emergency_service),
 ):
@@ -296,3 +296,43 @@ async def create_community_report(
         distance_m=data.distance_m,
         role_badge=data.role_badge
     )
+
+
+@router.delete(
+    "/{emergency_id}/community-reports/{report_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar reporte o foto de evidencia de la alerta",
+)
+async def delete_community_report(
+    emergency_id: str,
+    report_id: str,
+    current_user: Optional[CurrentUser] = Depends(get_current_user),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Permite al autor eliminar su actualización de la alerta."""
+    try:
+        rid = uuid.UUID(report_id)
+    except Exception:
+        rid = uuid.uuid5(uuid.NAMESPACE_DNS, str(report_id))
+    await service.delete_community_report(rid)
+    return None
+
+
+@router.put(
+    "/{emergency_id}/community-reports/{report_id}",
+    response_model=CommunityReportResponse,
+    summary="Editar mensaje o foto de evidencia de la alerta",
+)
+async def update_community_report(
+    emergency_id: str,
+    report_id: str,
+    data: CommunityReportUpdate,
+    current_user: Optional[CurrentUser] = Depends(get_current_user),
+    service: EmergencyService = Depends(get_emergency_service),
+):
+    """Permite al autor editar el mensaje o foto de su reporte."""
+    try:
+        rid = uuid.UUID(report_id)
+    except Exception:
+        rid = uuid.uuid5(uuid.NAMESPACE_DNS, str(report_id))
+    return await service.update_community_report(rid, data.message, data.image_url)

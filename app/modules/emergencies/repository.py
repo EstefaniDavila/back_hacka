@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
-from sqlalchemy import desc, func, or_, select, update
+from sqlalchemy import desc, func, or_, select, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.emergencies.models import (
@@ -607,4 +607,47 @@ class EmergencyRepository:
             "distance_m": distance_m or 50,
             "role_badge": role_badge or "Brigadista en Escena",
             "created_at": now
+        }
+
+    async def delete_community_report(self, report_id: uuid.UUID) -> bool:
+        """Elimina un reporte de la base de datos."""
+        stmt = text("DELETE FROM emergency_community_reports WHERE id = :id")
+        await self.session.execute(stmt, {"id": report_id})
+        await self.session.commit()
+        return True
+
+    async def update_community_report(
+        self,
+        report_id: uuid.UUID,
+        message: Optional[str] = None,
+        image_url: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Actualiza el mensaje o fotografía de un reporte situacional."""
+        updates = []
+        params = {"id": report_id}
+        if message is not None:
+            updates.append("message = :msg")
+            params["msg"] = message.strip()
+        if image_url is not None:
+            updates.append("image_url = :img")
+            params["img"] = image_url.strip() if image_url else None
+        if not updates:
+            return None
+        stmt = text(f"UPDATE emergency_community_reports SET {', '.join(updates)} WHERE id = :id RETURNING id, emergency_id, user_id, author_name, author_avatar, message, image_url, distance_m, role_badge, created_at")
+        res = await self.session.execute(stmt, params)
+        await self.session.commit()
+        r = res.fetchone()
+        if not r:
+            return None
+        return {
+            "id": str(r[0]),
+            "emergency_id": str(r[1]),
+            "user_id": str(r[2]) if r[2] else None,
+            "author_name": r[3],
+            "author_avatar": r[4] or "🧑",
+            "message": r[5],
+            "image_url": r[6],
+            "distance_m": r[7] or 50,
+            "role_badge": r[8] or "Vecino Solidario",
+            "created_at": r[9]
         }
