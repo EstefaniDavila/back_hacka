@@ -66,6 +66,17 @@ class AuthenticationException(VeciRedException):
         )
 
 
+class ForbiddenException(VeciRedException):
+    """Lanzada cuando el usuario no tiene permisos para realizar una acción."""
+
+    def __init__(self, message: str = "Acceso no autorizado a este recurso"):
+        super().__init__(
+            message=message,
+            code="FORBIDDEN",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
+
 async def vecired_exception_handler(
     request: Request, exc: VeciRedException
 ) -> JSONResponse:

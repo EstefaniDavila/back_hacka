@@ -130,3 +130,14 @@ async def get_current_user(
         role=role,
         raw_claims=payload,
     )
+
+
+async def get_optional_current_user(
+    auth_header: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),
+    x_test_user_id: Optional[str] = Header(None, alias="X-Test-User-Id"),
+) -> Optional[CurrentUser]:
+    """Obtiene el usuario actual si hay credenciales válidas; retorna None si es anónimo."""
+    try:
+        return await get_current_user(auth_header=auth_header, x_test_user_id=x_test_user_id)
+    except Exception:
+        return None

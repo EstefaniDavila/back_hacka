@@ -1,9 +1,13 @@
 """Servicio de lógica de negocio y ranking para el motor de búsqueda inteligente."""
 import difflib
+import json
 import math
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.logging import logger
 
 from app.modules.search.repository import (
     SearchRepository,
@@ -29,6 +33,32 @@ from app.modules.search.schemas import (
 )
 
 
+def classify_proximity_tier(dist_meters: Optional[float]) -> Tuple[Optional[int], str]:
+    """
+    Clasifica la distancia en los 5 niveles progresivos barriales:
+    Tier 1: <= 150m        -> 'En tu misma manzana (<150m)'
+    Tier 2: > 150m y <= 500m -> 'Manzanas colindantes (<500m)'
+    Tier 3: > 500m y <= 1500m-> 'Resto de la urbanización (<1.5 km)'
+    Tier 4: > 1500m y <= 5000m-> 'Zonas cercanas del distrito (<5 km)'
+    Tier 5: > 5000m y <= 10000m-> 'Otras zonas cercanas (<10 km)'
+    Sin GPS: None          -> 'Sin coordenadas GPS'
+    """
+    if dist_meters is None:
+        return None, "Sin coordenadas GPS"
+    if dist_meters <= 150.0:
+        return 1, "En tu misma manzana (<150m)"
+    elif dist_meters <= 500.0:
+        return 2, "Manzanas colindantes (<500m)"
+    elif dist_meters <= 1500.0:
+        return 3, "Resto de la urbanización (<1.5 km)"
+    elif dist_meters <= 5000.0:
+        return 4, "Zonas cercanas del distrito (<5 km)"
+    elif dist_meters <= 10000.0:
+        return 5, "Otras zonas cercanas (<10 km)"
+    else:
+        return None, "Fuera de rango (>10 km)"
+
+
 class SearchService:
     """
     Servicio de búsqueda inteligente geolocalizada con ranking multidimensional ponderado:
@@ -45,6 +75,69 @@ class SearchService:
     # ------------------------------------------------------------------
     # MÉTODOS AUXILIARES DE RANKING Y PUNTUACIÓN
     # ------------------------------------------------------------------
+    def _build_location_meta(
+        self,
+        latitude: Optional[float],
+        longitude: Optional[float],
+        radius_km: Optional[float],
+        items: List[Any],
+    ) -> SearchLocationMeta:
+        """Construye los metadatos de ubicación, tier alcanzado y expansión progresiva."""
+        if latitude is None or longitude is None:
+            return SearchLocationMeta(
+                latitude=latitude,
+                longitude=longitude,
+                radius_km=radius_km,
+                reference=None,
+                tier_reached=None,
+                expansion_label="Ubicación no especificada. Mostrando catálogo comunitario.",
+                tier_counts={},
+            )
+
+        tier_counts = {
+            "tier_1": 0,
+            "tier_2": 0,
+            "tier_3": 0,
+            "tier_4": 0,
+            "tier_5": 0,
+            "sin_coordenadas": 0,
+        }
+
+        tiers_found = []
+        for it in items:
+            tier = getattr(it, "proximity_tier", None)
+            if tier is not None and 1 <= tier <= 5:
+                tier_counts[f"tier_{tier}"] += 1
+                tiers_found.append(tier)
+            else:
+                tier_counts["sin_coordenadas"] += 1
+
+        tier_reached = min(tiers_found) if tiers_found else None
+
+        if len(items) == 0:
+            expansion_label = "No se encontraron resultados dentro del radio máximo de 10 km"
+        elif tier_reached == 1:
+            expansion_label = "Resultados en tu misma manzana (<150m)"
+        elif tier_reached == 2:
+            expansion_label = "Búsqueda ampliada a manzanas colindantes (<500m)"
+        elif tier_reached == 3:
+            expansion_label = "Búsqueda ampliada al resto de la urbanización (<1.5 km)"
+        elif tier_reached == 4:
+            expansion_label = "Búsqueda ampliada a zonas cercanas del distrito (<5 km)"
+        elif tier_reached == 5:
+            expansion_label = "Búsqueda ampliada a otras zonas cercanas (<10 km)"
+        else:
+            expansion_label = "Resultados comunitarios disponibles (sin coordenadas GPS registradas)"
+
+        return SearchLocationMeta(
+            latitude=latitude,
+            longitude=longitude,
+            radius_km=radius_km or 10.0,
+            tier_reached=tier_reached,
+            expansion_label=expansion_label,
+            tier_counts=tier_counts,
+        )
+
     def _calculate_text_match_score(
         self,
         query: Optional[str],
@@ -117,34 +210,36 @@ class SearchService:
         item_lat: Optional[float],
         item_lon: Optional[float],
         radius_km: Optional[float] = None,
-    ) -> Tuple[Optional[float], Optional[float], float, bool]:
+    ) -> Tuple[Optional[float], Optional[float], float, bool, Optional[int], str]:
         """
-        Retorna (distance_km, distance_meters, distance_score, within_radius).
-        - Mide la distancia real en metros entre el GPS del usuario y las coordenadas de la publicación o vecino.
-        - Excluye resultados fuera del radio seleccionado (mínimo 1 km o superior).
-        - No inventa distancias ficticias cuando no hay coordenadas GPS.
+        Retorna (distance_km, distance_meters, distance_score, within_radius, proximity_tier, proximity_label).
+        - Mide distancia real en metros usando Haversine.
+        - Límite máximo de proximidad progresiva: 10 km (10,000 m), o radius_km si se especifica.
+        - Si el item no tiene coordenadas, retorna within_radius=True con tier=None y label="Sin coordenadas GPS".
+        - Si supera el límite de 10 km, within_radius=False.
         """
-        if user_lat is None or user_lon is None or item_lat is None or item_lon is None:
-            if radius_km is not None:
-                # Con radio de filtrado estricto, sin GPS se descarta
-                return None, None, 0.0, False
-            return None, None, 0.50, True
+        if user_lat is None or user_lon is None:
+            if item_lat is not None and item_lon is not None:
+                return None, None, 0.50, True, None, "Ubicación del usuario no especificada"
+            return None, None, 0.50, True, None, "Sin coordenadas GPS"
+
+        if item_lat is None or item_lon is None:
+            return None, None, 0.0, True, None, "Sin coordenadas GPS"
 
         dist_meters = haversine_distance_meters(user_lat, user_lon, item_lat, item_lon)
         dist_km = round(dist_meters / 1000.0, 3)
 
-        # Excluir resultados fuera del radio seleccionado
-        if radius_km is not None:
-            max_meters = radius_km * 1000.0
-            if dist_meters > max_meters:
-                return dist_km, dist_meters, 0.0, False
+        max_allowed_meters = (radius_km * 1000.0) if radius_km is not None else 10000.0
 
-        # Normalización continua y equitativa de proximidad (0.0 a 1.0)
-        eff_radius_m = (radius_km * 1000.0) if radius_km else 5000.0
-        # A 0 m -> 1.0; a eff_radius_m -> 0.0
-        dist_score = max(0.0, min(1.0, 1.0 - (dist_meters / eff_radius_m)))
+        if dist_meters > max_allowed_meters:
+            tier, label = classify_proximity_tier(dist_meters)
+            return dist_km, dist_meters, 0.0, False, tier, label
 
-        return dist_km, dist_meters, round(dist_score, 4), True
+        tier, label = classify_proximity_tier(dist_meters)
+        # Normalización continua de proximidad: a 0 m -> 1.0; a max_allowed_meters -> 0.0
+        dist_score = max(0.0, min(1.0, 1.0 - (dist_meters / max_allowed_meters)))
+
+        return dist_km, dist_meters, round(dist_score, 4), True, tier, label
 
     def _calculate_bayesian_reputation(
         self,
@@ -192,6 +287,7 @@ class SearchService:
         sort: SearchSort = SearchSort.RECOMMENDED,
         page: int = 1,
         page_size: int = 20,
+        user_id: Optional[uuid.UUID] = None,
     ) -> PaginatedServicesSearch:
         """Búsqueda especializada en oficios y servicios comunitarios."""
         raw_items = await self.repository.search_services_raw(
@@ -200,10 +296,11 @@ class SearchService:
             community_id=community_id,
         )
 
-        ranked: List[ServiceSearchResult] = []
+        items_within_range: List[ServiceSearchResult] = []
+        items_without_coords: List[ServiceSearchResult] = []
 
         for item in raw_items:
-            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius, tier, label = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -247,49 +344,67 @@ class SearchService:
             score_val = round(final_score, 4)
             is_verified = item["provider_status"] in ("verified", "active")
 
-            ranked.append(
-                ServiceSearchResult(
-                    id=item["id"],
-                    title=item["title"],
-                    description=item["description"],
-                    category_id=item["category_id"],
-                    category_name=item["category_name"],
-                    category_icon=item["category_icon"],
-                    price_from=item["price_from"],
-                    price_unit=item["price_unit"],
-                    availability=item["availability"],
-                    provider_id=item["provider_id"],
-                    provider_name=item["provider_name"],
-                    provider_avatar=item["provider_avatar"],
-                    provider_phone=item["provider_phone"],
-                    is_verified=is_verified,
-                    is_new=is_new,
-                    rating_avg=item["rating_avg"],
-                    reviews_count=item["reviews_count"],
-                    bayesian_rating=bayes_rating,
-                    completed_interactions=completed,
-                    distance_km=dist_km,
-                    distance_meters=dist_meters,
-                    community_id=item["community_id"],
-                    community_name=item["community_name"],
-                    district_name=item["district_name"],
-                    score=score_val,
-                    ranking_score=score_val,
-                    score_breakdown={
-                        "match_score": match_score,
-                        "distance_score": dist_score,
-                        "reputation_score": rep_score,
-                        "experience_score": exp_score,
-                        "distance_meters": dist_meters,
-                        "final_score": score_val,
-                        "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 15% rep, 5% exp",
-                    },
-                    created_at=item["created_at"],
-                )
+            svc_result = ServiceSearchResult(
+                id=item["id"],
+                title=item["title"],
+                description=item["description"],
+                category_id=item["category_id"],
+                category_name=item["category_name"],
+                category_icon=item["category_icon"],
+                price_from=item["price_from"],
+                price_unit=item["price_unit"],
+                availability=item["availability"],
+                provider_id=item["provider_id"],
+                provider_name=item["provider_name"],
+                provider_avatar=item["provider_avatar"],
+                provider_phone=item["provider_phone"],
+                is_verified=is_verified,
+                is_new=is_new,
+                rating_avg=item["rating_avg"],
+                reviews_count=item["reviews_count"],
+                bayesian_rating=bayes_rating,
+                completed_interactions=completed,
+                distance_km=dist_km,
+                distance_meters=dist_meters,
+                proximity_tier=tier,
+                proximity_label=label,
+                community_id=item["community_id"],
+                community_name=item["community_name"],
+                district_name=item["district_name"],
+                score=score_val,
+                ranking_score=score_val,
+                score_breakdown={
+                    "match_score": match_score,
+                    "distance_score": dist_score,
+                    "reputation_score": rep_score,
+                    "experience_score": exp_score,
+                    "distance_meters": dist_meters,
+                    "final_score": score_val,
+                    "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 15% rep, 5% exp",
+                },
+                created_at=item["created_at"],
             )
 
-        # Ordenamiento
-        self._sort_items(ranked, sort)
+            if dist_meters is not None:
+                items_within_range.append(svc_result)
+            else:
+                items_without_coords.append(svc_result)
+
+        # Ordenamiento progresivo por proximidad
+        if latitude is not None and longitude is not None:
+            if len(items_within_range) == 0:
+                ranked = []
+            else:
+                self._sort_items(items_within_range, sort)
+                items_without_coords.sort(key=lambda x: -getattr(x, "score", 0.0))
+                ranked = items_within_range + items_without_coords
+        else:
+            ranked = items_within_range + items_without_coords
+            self._sort_items(ranked, sort)
+
+        # Persistir recomendaciones Top en ai_recommendations si el usuario está autenticado y es orden recomendado
+        if user_id and sort == SearchSort.RECOMMENDED:
+            await self._persist_recommendations(user_id, "service", ranked)
 
         # Paginación
         total = len(ranked)
@@ -305,11 +420,7 @@ class SearchService:
                 limit=page_size,
                 total_pages=total_pages,
             ),
-            location_applied=SearchLocationMeta(
-                latitude=latitude,
-                longitude=longitude,
-                radius_km=radius_km,
-            ),
+            location_applied=self._build_location_meta(latitude, longitude, radius_km, ranked),
             sort_applied=sort.value,
         )
 
@@ -327,6 +438,7 @@ class SearchService:
         sort: SearchSort = SearchSort.RECOMMENDED,
         page: int = 1,
         page_size: int = 20,
+        user_id: Optional[uuid.UUID] = None,
     ) -> PaginatedProductsSearch:
         """Búsqueda especializada en productos y comercios barriales."""
         raw_items = await self.repository.search_products_raw(
@@ -335,10 +447,11 @@ class SearchService:
             community_id=community_id,
         )
 
-        ranked: List[ProductSearchResult] = []
+        items_within_range: List[ProductSearchResult] = []
+        items_without_coords: List[ProductSearchResult] = []
 
         for item in raw_items:
-            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius, tier, label = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -375,45 +488,63 @@ class SearchService:
             score_val = round(final_score, 4)
             is_verified = item["owner_status"] in ("verified", "active")
 
-            ranked.append(
-                ProductSearchResult(
-                    id=item["id"],
-                    name=item["name"],
-                    description=item["description"],
-                    price=item["price"],
-                    stock=item["stock"],
-                    image_url=item["image_url"],
-                    business_id=item["business_id"],
-                    business_name=item["business_name"],
-                    category_id=item["category_id"],
-                    category_name=item["category_name"],
-                    owner_id=item["owner_id"],
-                    owner_name=item["owner_name"],
-                    is_verified=is_verified,
-                    is_new=is_new,
-                    rating_avg=item["rating_avg"],
-                    reviews_count=item["reviews_count"],
-                    bayesian_rating=bayes_rating,
-                    distance_km=dist_km,
-                    distance_meters=dist_meters,
-                    community_name=item["community_name"],
-                    district_name=item["district_name"],
-                    score=score_val,
-                    ranking_score=score_val,
-                    score_breakdown={
-                        "match_score": match_score,
-                        "distance_score": dist_score,
-                        "reputation_score": rep_score,
-                        "experience_score": exp_score,
-                        "distance_meters": dist_meters,
-                        "final_score": score_val,
-                        "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 15% rep, 5% exp",
-                    },
-                    created_at=item["created_at"],
-                )
+            prod_result = ProductSearchResult(
+                id=item["id"],
+                name=item["name"],
+                description=item["description"],
+                price=item["price"],
+                stock=item["stock"],
+                image_url=item["image_url"],
+                business_id=item["business_id"],
+                business_name=item["business_name"],
+                category_id=item["category_id"],
+                category_name=item["category_name"],
+                owner_id=item["owner_id"],
+                owner_name=item["owner_name"],
+                is_verified=is_verified,
+                is_new=is_new,
+                rating_avg=item["rating_avg"],
+                reviews_count=item["reviews_count"],
+                bayesian_rating=bayes_rating,
+                distance_km=dist_km,
+                distance_meters=dist_meters,
+                proximity_tier=tier,
+                proximity_label=label,
+                community_name=item["community_name"],
+                district_name=item["district_name"],
+                score=score_val,
+                ranking_score=score_val,
+                score_breakdown={
+                    "match_score": match_score,
+                    "distance_score": dist_score,
+                    "reputation_score": rep_score,
+                    "experience_score": exp_score,
+                    "distance_meters": dist_meters,
+                    "final_score": score_val,
+                    "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 15% rep, 5% exp",
+                },
+                created_at=item["created_at"],
             )
 
-        self._sort_items(ranked, sort)
+            if dist_meters is not None:
+                items_within_range.append(prod_result)
+            else:
+                items_without_coords.append(prod_result)
+
+        # Ordenamiento progresivo por proximidad
+        if latitude is not None and longitude is not None:
+            if len(items_within_range) == 0:
+                ranked = []
+            else:
+                self._sort_items(items_within_range, sort)
+                items_without_coords.sort(key=lambda x: -getattr(x, "score", 0.0))
+                ranked = items_within_range + items_without_coords
+        else:
+            ranked = items_within_range + items_without_coords
+            self._sort_items(ranked, sort)
+
+        if user_id and sort == SearchSort.RECOMMENDED:
+            await self._persist_recommendations(user_id, "product", ranked)
 
         total = len(ranked)
         skip = (page - 1) * page_size
@@ -428,11 +559,7 @@ class SearchService:
                 limit=page_size,
                 total_pages=total_pages,
             ),
-            location_applied=SearchLocationMeta(
-                latitude=latitude,
-                longitude=longitude,
-                radius_km=radius_km,
-            ),
+            location_applied=self._build_location_meta(latitude, longitude, radius_km, ranked),
             sort_applied=sort.value,
         )
 
@@ -450,6 +577,7 @@ class SearchService:
         sort: SearchSort = SearchSort.RECOMMENDED,
         page: int = 1,
         page_size: int = 20,
+        user_id: Optional[uuid.UUID] = None,
     ) -> PaginatedSolidaritySearch:
         """Búsqueda en el muro solidario. No usa estrellas para ordenar necesidades urgentes."""
         raw_items = await self.repository.search_solidarity_raw(
@@ -458,10 +586,11 @@ class SearchService:
             community_id=community_id,
         )
 
-        ranked: List[SolidaritySearchResult] = []
+        items_within_range: List[SolidaritySearchResult] = []
+        items_without_coords: List[SolidaritySearchResult] = []
 
         for item in raw_items:
-            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius, tier, label = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -494,38 +623,56 @@ class SearchService:
 
             is_verified = item["author_status"] in ("verified", "active")
 
-            ranked.append(
-                SolidaritySearchResult(
-                    id=item["id"],
-                    title=item["title"],
-                    description=item["description"],
-                    category=item["category"],
-                    post_type=item["post_type"],
-                    status=item["status"],
-                    author_id=item["author_id"],
-                    author_name=item["author_name"],
-                    author_avatar=item["author_avatar"],
-                    is_verified=is_verified,
-                    is_urgent=is_urgent,
-                    distance_km=dist_km,
-                    distance_meters=dist_meters,
-                    community_name=item["community_name"],
-                    district_name=item["district_name"],
-                    score=score_val,
-                    ranking_score=score_val,
-                    score_breakdown={
-                        "match_score": match_score,
-                        "distance_score": dist_score,
-                        "urgency_score": urgency_score,
-                        "distance_meters": dist_meters,
-                        "final_score": score_val,
-                        "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 20% urgencia",
-                    },
-                    created_at=item["created_at"],
-                )
+            sol_result = SolidaritySearchResult(
+                id=item["id"],
+                title=item["title"],
+                description=item["description"],
+                category=item["category"],
+                post_type=item["post_type"],
+                status=item["status"],
+                author_id=item["author_id"],
+                author_name=item["author_name"],
+                author_avatar=item["author_avatar"],
+                is_verified=is_verified,
+                is_urgent=is_urgent,
+                distance_km=dist_km,
+                distance_meters=dist_meters,
+                proximity_tier=tier,
+                proximity_label=label,
+                community_name=item["community_name"],
+                district_name=item["district_name"],
+                score=score_val,
+                ranking_score=score_val,
+                score_breakdown={
+                    "match_score": match_score,
+                    "distance_score": dist_score,
+                    "urgency_score": urgency_score,
+                    "distance_meters": dist_meters,
+                    "final_score": score_val,
+                    "algorithm_notes": f"55% prox ({dist_meters}m), 25% rel, 20% urgencia",
+                },
+                created_at=item["created_at"],
             )
 
-        self._sort_items(ranked, sort)
+            if dist_meters is not None:
+                items_within_range.append(sol_result)
+            else:
+                items_without_coords.append(sol_result)
+
+        # Ordenamiento progresivo por proximidad
+        if latitude is not None and longitude is not None:
+            if len(items_within_range) == 0:
+                ranked = []
+            else:
+                self._sort_items(items_within_range, sort)
+                items_without_coords.sort(key=lambda x: -getattr(x, "score", 0.0))
+                ranked = items_within_range + items_without_coords
+        else:
+            ranked = items_within_range + items_without_coords
+            self._sort_items(ranked, sort)
+
+        if user_id and sort == SearchSort.RECOMMENDED:
+            await self._persist_recommendations(user_id, "solidarity", ranked)
 
         total = len(ranked)
         skip = (page - 1) * page_size
@@ -540,11 +687,7 @@ class SearchService:
                 limit=page_size,
                 total_pages=total_pages,
             ),
-            location_applied=SearchLocationMeta(
-                latitude=latitude,
-                longitude=longitude,
-                radius_km=radius_km,
-            ),
+            location_applied=self._build_location_meta(latitude, longitude, radius_km, ranked),
             sort_applied=sort.value,
         )
 
@@ -562,6 +705,7 @@ class SearchService:
         sort: SearchSort = SearchSort.RECOMMENDED,
         page: int = 1,
         page_size: int = 20,
+        user_id: Optional[uuid.UUID] = None,
     ) -> PaginatedEmergenciesSearch:
         """Búsqueda en emergencias. Prioriza gravedad, cercanía y estado. NUNCA reputación."""
         raw_items = await self.repository.search_emergencies_raw(
@@ -570,7 +714,8 @@ class SearchService:
             community_id=community_id,
         )
 
-        ranked: List[EmergencySearchResult] = []
+        items_within_range: List[EmergencySearchResult] = []
+        items_without_coords: List[EmergencySearchResult] = []
 
         SEVERITY_WEIGHTS = {
             "critical": 1.0,
@@ -588,7 +733,7 @@ class SearchService:
         }
 
         for item in raw_items:
-            dist_km, dist_meters, dist_score, within_radius = self._calculate_distance_and_score(
+            dist_km, dist_meters, dist_score, within_radius, tier, label = self._calculate_distance_and_score(
                 latitude, longitude, item["latitude"], item["longitude"], radius_km
             )
             if not within_radius:
@@ -621,48 +766,53 @@ class SearchService:
             final_score = min(1.0, max(0.0, final_score))
             score_val = round(final_score, 4)
 
-            ranked.append(
-                EmergencySearchResult(
-                    id=item["id"],
-                    title=item["title"],
-                    description=item["description"],
-                    emergency_type=item["emergency_type"],
-                    severity=item["severity"],
-                    status=item["status"],
-                    reported_by=item["reported_by"],
-                    reporter_name=item["reporter_name"],
-                    occurred_at=item["occurred_at"],
-                    distance_km=dist_km,
-                    distance_meters=dist_meters,
-                    community_name=item["community_name"],
-                    district_name=item["district_name"],
-                    score=score_val,
-                    ranking_score=score_val,
-                    score_breakdown={
-                        "severity_score": severity_composite,
-                        "distance_score": dist_score,
-                        "match_score": match_score,
-                        "distance_meters": dist_meters,
-                        "final_score": score_val,
-                        "algorithm_notes": f"50% gravedad ({item['severity']}), 35% prox ({dist_meters}m), 15% rel",
-                    },
-                    created_at=item["created_at"],
-                )
+            emg_result = EmergencySearchResult(
+                id=item["id"],
+                title=item["title"],
+                description=item["description"],
+                emergency_type=item["emergency_type"],
+                severity=item["severity"],
+                status=item["status"],
+                reported_by=item["reported_by"],
+                reporter_name=item["reporter_name"],
+                occurred_at=item["occurred_at"],
+                distance_km=dist_km,
+                distance_meters=dist_meters,
+                proximity_tier=tier,
+                proximity_label=label,
+                community_name=item["community_name"],
+                district_name=item["district_name"],
+                score=score_val,
+                ranking_score=score_val,
+                score_breakdown={
+                    "severity_score": severity_composite,
+                    "distance_score": dist_score,
+                    "match_score": match_score,
+                    "distance_meters": dist_meters,
+                    "final_score": score_val,
+                    "algorithm_notes": f"50% gravedad ({item['severity']}), 35% prox ({dist_meters}m), 15% rel",
+                },
+                created_at=item["created_at"],
             )
 
-        # Para emergencias por defecto ordenar por gravedad/score
-        if sort == SearchSort.DISTANCE:
-            ranked.sort(key=lambda x: (x.distance_meters is None, x.distance_meters or 9999999.0, -x.score))
+            if dist_meters is not None:
+                items_within_range.append(emg_result)
+            else:
+                items_without_coords.append(emg_result)
+
+        # Ordenamiento especializado de seguridad para emergencias
+        if latitude is not None and longitude is not None:
+            if len(items_within_range) == 0:
+                ranked = []
+            else:
+                ranked = items_within_range + items_without_coords
+                self._sort_emergencies(ranked, sort)
         else:
-            # RECOMMENDED: Críticas activas conservan máxima prioridad, priorizando cercanía dentro de cada nivel
-            ranked.sort(
-                key=lambda x: (
-                    -round(x.score_breakdown.get("severity_score", 0.0) if x.score_breakdown else 0.0, 2),
-                    x.distance_meters is None,
-                    x.distance_meters or 9999999.0,
-                    -x.score,
-                )
-            )
+            ranked = items_within_range + items_without_coords
+            self._sort_emergencies(ranked, sort)
+
+        if user_id and sort == SearchSort.RECOMMENDED:
+            await self._persist_recommendations(user_id, "emergency", ranked)
 
         total = len(ranked)
         skip = (page - 1) * page_size
@@ -677,11 +827,7 @@ class SearchService:
                 limit=page_size,
                 total_pages=total_pages,
             ),
-            location_applied=SearchLocationMeta(
-                latitude=latitude,
-                longitude=longitude,
-                radius_km=radius_km,
-            ),
+            location_applied=self._build_location_meta(latitude, longitude, radius_km, ranked),
             sort_applied=sort.value,
         )
 
@@ -698,9 +844,20 @@ class SearchService:
         sort: SearchSort = SearchSort.RECOMMENDED,
         page: int = 1,
         page_size: int = 20,
+        user_id: Optional[uuid.UUID] = None,
+        include_emergencies: bool = True,
+        modules: Optional[str] = None,
     ) -> GlobalSearchResponse:
         """Búsqueda general transversal que combina e intercala servicios, productos, solidaridad y emergencias."""
-        # Ejecutar búsquedas en paralelo conceptual en cada módulo
+        parsed_modules = set([m.strip().lower() for m in modules.split(",") if m.strip()]) if modules else None
+
+        fetch_services = parsed_modules is None or "services" in parsed_modules
+        fetch_products = parsed_modules is None or "products" in parsed_modules
+        fetch_solidarity = parsed_modules is None or "solidarity" in parsed_modules
+        fetch_emergencies = include_emergencies and (parsed_modules is None or "emergencies" in parsed_modules)
+
+        empty_pagination = SearchPaginationMeta(total=0, page=1, limit=30, total_pages=1)
+
         services_res = await self.search_services(
             query=query,
             latitude=latitude,
@@ -710,7 +867,8 @@ class SearchService:
             sort=sort,
             page=1,
             page_size=30,
-        )
+            user_id=user_id,
+        ) if fetch_services else PaginatedServicesSearch(items=[], meta=empty_pagination)
 
         products_res = await self.search_products(
             query=query,
@@ -721,7 +879,8 @@ class SearchService:
             sort=sort,
             page=1,
             page_size=30,
-        )
+            user_id=user_id,
+        ) if fetch_products else PaginatedProductsSearch(items=[], meta=empty_pagination)
 
         solidarity_res = await self.search_solidarity(
             query=query,
@@ -732,7 +891,8 @@ class SearchService:
             sort=sort,
             page=1,
             page_size=30,
-        )
+            user_id=user_id,
+        ) if fetch_solidarity else PaginatedSolidaritySearch(items=[], meta=empty_pagination)
 
         emergencies_res = await self.search_emergencies(
             query=query,
@@ -743,7 +903,8 @@ class SearchService:
             sort=sort,
             page=1,
             page_size=30,
-        )
+            user_id=user_id,
+        ) if fetch_emergencies else PaginatedEmergenciesSearch(items=[], meta=empty_pagination)
 
         unified_list: List[UnifiedSearchResultItem] = []
 
@@ -766,6 +927,8 @@ class SearchService:
                     price_label=price_str,
                     distance_km=s.distance_km,
                     distance_meters=s.distance_meters,
+                    proximity_tier=s.proximity_tier,
+                    proximity_label=s.proximity_label,
                     location_label=s.district_name or s.community_name,
                     rating=s.rating_avg if s.reviews_count > 0 else None,
                     reviews_count=s.reviews_count,
@@ -793,6 +956,8 @@ class SearchService:
                     price_label=f"S/ {p.price}",
                     distance_km=p.distance_km,
                     distance_meters=p.distance_meters,
+                    proximity_tier=p.proximity_tier,
+                    proximity_label=p.proximity_label,
                     location_label=p.district_name or p.community_name,
                     rating=p.rating_avg if p.reviews_count > 0 else None,
                     reviews_count=p.reviews_count,
@@ -821,6 +986,8 @@ class SearchService:
                     price_label="Gratuito",
                     distance_km=sol.distance_km,
                     distance_meters=sol.distance_meters,
+                    proximity_tier=sol.proximity_tier,
+                    proximity_label=sol.proximity_label,
                     location_label=sol.district_name or sol.community_name,
                     rating=None,
                     reviews_count=None,
@@ -848,6 +1015,8 @@ class SearchService:
                     price_label="Emergencia Activa",
                     distance_km=emg.distance_km,
                     distance_meters=emg.distance_meters,
+                    proximity_tier=emg.proximity_tier,
+                    proximity_label=emg.proximity_label,
                     location_label=emg.district_name or emg.community_name,
                     rating=None,
                     reviews_count=None,
@@ -862,21 +1031,26 @@ class SearchService:
 
         # Ordenar lista consolidada
         if sort == SearchSort.DISTANCE:
-            unified_list.sort(key=lambda x: (x.distance_meters is None, x.distance_meters or 9999999.0, -x.score))
+            unified_list.sort(
+                key=lambda x: (
+                    x.distance_meters is None,
+                    x.distance_meters if x.distance_meters is not None else float("inf"),
+                    -x.score,
+                )
+            )
         else:
             # RECOMMENDED: Emergencias críticas activas conservan máxima prioridad;
-            # el resto se ordena principalmente por cercanía y score
+            # luego proximidad por distancia real ascendente, y desempate por score
             def unified_sort_key(item: UnifiedSearchResultItem):
                 is_crit_emergency = (
                     item.module == "emergencies"
-                    and "CRITICAL" in (item.badge or "").upper()
+                    and ("CRITICAL" in (item.badge or "").upper() or "CRITICA" in (item.badge or "").upper())
                 )
                 return (
-                    not is_crit_emergency,  # 0 para emergencias críticas, 1 para el resto
-                    -round(item.score, 2),
-                    item.distance_meters is None,
-                    item.distance_meters or 9999999.0,
-                    -item.score,
+                    not is_crit_emergency,  # 0 para emergencias críticas activas, 1 para el resto
+                    item.distance_meters is None,  # Con GPS primero
+                    item.distance_meters if item.distance_meters is not None else float("inf"),  # Distancia ascendente
+                    -round(item.score, 2),  # Criterio secundario
                 )
             unified_list.sort(key=unified_sort_key)
 
@@ -887,11 +1061,7 @@ class SearchService:
 
         return GlobalSearchResponse(
             query=query,
-            location_applied=SearchLocationMeta(
-                latitude=latitude,
-                longitude=longitude,
-                radius_km=radius_km,
-            ),
+            location_applied=self._build_location_meta(latitude, longitude, radius_km, unified_list),
             sort_applied=sort.value,
             total_results=total,
             page=page,
@@ -913,13 +1083,18 @@ class SearchService:
         )
 
     def _sort_items(self, items: List[Any], sort: SearchSort) -> None:
-        """Aplica la estrategia de ordenamiento sobre los resultados rankeados."""
+        """
+        Aplica la estrategia de ordenamiento sobre los resultados rankeados:
+        1. Priorizar siempre los registros más cercanos (distancia real ascendente).
+        2. Registros sin coordenadas van al final.
+        3. Criterios secundarios (score, coincidencia, reputación) para desempate.
+        """
         if sort == SearchSort.DISTANCE:
-            # Estrictamente por distancia ascendente en metros
+            # Estrictamente por distancia ascendente en metros; sin GPS al final
             items.sort(
                 key=lambda x: (
                     x.distance_meters is None,
-                    x.distance_meters or 9999999.0,
+                    x.distance_meters if x.distance_meters is not None else float("inf"),
                     -getattr(x, "score", 0.0),
                 )
             )
@@ -927,20 +1102,190 @@ class SearchService:
             # Mayor coincidencia textual, luego proximidad
             items.sort(
                 key=lambda x: (
-                    -(x.score_breakdown.get("match_score", 0.0) if x.score_breakdown else 0.0),
-                    -round(getattr(x, "score", 0.0), 2),
+                    -(x.score_breakdown.get("match_score", 0.0) if getattr(x, "score_breakdown", None) else 0.0),
                     x.distance_meters is None,
-                    x.distance_meters or 9999999.0,
+                    x.distance_meters if x.distance_meters is not None else float("inf"),
+                    -round(getattr(x, "score", 0.0), 2),
                 )
             )
         else:  # RECOMMENDED
-            # Proximidad (55%) + Relevancia (25%) + Reputación (15%) + Experiencia (5%)
-            # Si dos vecinos tienen puntuaciones similares, prioriza al más cercano
+            # Proximidad primero (distancia real ascendente); sin GPS al final
+            # Score (relevancia + reputación + experiencia) como desempate
             items.sort(
                 key=lambda x: (
-                    -round(getattr(x, "score", 0.0), 2),
                     x.distance_meters is None,
-                    x.distance_meters or 9999999.0,
+                    x.distance_meters if x.distance_meters is not None else float("inf"),
                     -getattr(x, "score", 0.0),
                 )
             )
+
+    def _sort_emergencies(self, emergencies: List[EmergencySearchResult], sort: SearchSort) -> None:
+        """
+        Ordenamiento especializado de seguridad para emergencias:
+        REGLA CRÍTICA: NUNCA alterar la prioridad de seguridad de emergencias.
+        1. Estado: Activas / Reportadas / En proceso van primero; cerradas/resueltas al final.
+        2. Gravedad: Crítica > Alta > Media > Baja.
+        3. Distancia ascendente en metros dentro de cada nivel de gravedad y estado.
+        4. Antigüedad: más recientes primero.
+        """
+        SEVERITY_ORDER = {
+            "critical": 0,
+            "critica": 0,
+            "high": 1,
+            "alta": 1,
+            "medium": 2,
+            "media": 2,
+            "low": 3,
+            "baja": 3,
+        }
+        INACTIVE_STATUSES = {"resolved", "resuelto", "resuelta", "closed", "cerrado", "cerrada", "cancelada", "cancelled"}
+
+        def emergency_key(emg: EmergencySearchResult):
+            status_val = str(emg.status).lower().strip()
+            is_inactive = 1 if status_val in INACTIVE_STATUSES else 0
+
+            sev_val = str(emg.severity).lower().strip()
+            sev_rank = SEVERITY_ORDER.get(sev_val, 4)
+
+            has_no_dist = emg.distance_meters is None
+            dist_m = emg.distance_meters if emg.distance_meters is not None else float("inf")
+
+            created_ts = -emg.created_at.timestamp() if emg.created_at else 0.0
+
+            if sort == SearchSort.DISTANCE:
+                return (
+                    is_inactive,
+                    has_no_dist,
+                    dist_m,
+                    sev_rank,
+                    created_ts,
+                )
+            else:  # RECOMMENDED
+                return (
+                    is_inactive,
+                    sev_rank,
+                    has_no_dist,
+                    dist_m,
+                    created_ts,
+                )
+
+        emergencies.sort(key=emergency_key)
+
+    async def _persist_recommendations(
+        self,
+        user_id: Optional[uuid.UUID],
+        rec_type: str,
+        items: list,
+    ) -> None:
+        """Persiste las recomendaciones del usuario mediante upsert atómico evitando duplicados."""
+        if not user_id or not items:
+            return
+
+        top_items = items[:10]
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        for it in top_items:
+            score_val = round(float(getattr(it, "score", 0.0) or getattr(it, "match_score", 0.0) or 0.0), 4)
+            breakdown = getattr(it, "score_breakdown", {}) or {}
+            item_id = it.id
+
+            if rec_type == "service":
+                stmt = text("""
+                    INSERT INTO ai_recommendations (id, user_id, recommendation_type, service_id, score, score_breakdown, algorithm_version, created_at)
+                    VALUES (:id, :user_id, :rec_type, :item_id, :score, :breakdown, 'v1.0', :created_at)
+                    ON CONFLICT (user_id, service_id) WHERE service_id IS NOT NULL
+                    DO UPDATE SET 
+                        score = EXCLUDED.score,
+                        score_breakdown = EXCLUDED.score_breakdown,
+                        created_at = EXCLUDED.created_at;
+                """)
+            elif rec_type == "product":
+                stmt = text("""
+                    INSERT INTO ai_recommendations (id, user_id, recommendation_type, product_id, score, score_breakdown, algorithm_version, created_at)
+                    VALUES (:id, :user_id, :rec_type, :item_id, :score, :breakdown, 'v1.0', :created_at)
+                    ON CONFLICT (user_id, product_id) WHERE product_id IS NOT NULL
+                    DO UPDATE SET 
+                        score = EXCLUDED.score,
+                        score_breakdown = EXCLUDED.score_breakdown,
+                        created_at = EXCLUDED.created_at;
+                """)
+            elif rec_type == "solidarity":
+                stmt = text("""
+                    INSERT INTO ai_recommendations (id, user_id, recommendation_type, solidarity_post_id, score, score_breakdown, algorithm_version, created_at)
+                    VALUES (:id, :user_id, :rec_type, :item_id, :score, :breakdown, 'v1.0', :created_at)
+                    ON CONFLICT (user_id, solidarity_post_id) WHERE solidarity_post_id IS NOT NULL
+                    DO UPDATE SET 
+                        score = EXCLUDED.score,
+                        score_breakdown = EXCLUDED.score_breakdown,
+                        created_at = EXCLUDED.created_at;
+                """)
+            elif rec_type == "emergency":
+                stmt = text("""
+                    INSERT INTO ai_recommendations (id, user_id, recommendation_type, emergency_id, score, score_breakdown, algorithm_version, created_at)
+                    VALUES (:id, :user_id, :rec_type, :item_id, :score, :breakdown, 'v1.0', :created_at)
+                    ON CONFLICT (user_id, emergency_id) WHERE emergency_id IS NOT NULL
+                    DO UPDATE SET 
+                        score = EXCLUDED.score,
+                        score_breakdown = EXCLUDED.score_breakdown,
+                        created_at = EXCLUDED.created_at;
+                """)
+            else:
+                continue
+
+            try:
+                await self.session.execute(
+                    stmt,
+                    {
+                        "id": uuid.uuid4(),
+                        "user_id": user_id,
+                        "rec_type": rec_type,
+                        "item_id": item_id,
+                        "score": score_val,
+                        "breakdown": json.dumps(breakdown),
+                        "created_at": now,
+                    },
+                )
+            except Exception as e:
+                logger.warning("Error persistiendo ai_recommendation: %s", str(e))
+
+        try:
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+
+    async def get_user_recommendations(
+        self,
+        user_id: uuid.UUID,
+        rec_type: Optional[str] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Recupera las recomendaciones persistidas más recientes para el usuario desde ai_recommendations."""
+        query_sql = """
+            SELECT 
+                r.id,
+                r.recommendation_type,
+                r.service_id,
+                r.product_id,
+                r.solidarity_post_id,
+                r.emergency_id,
+                r.score,
+                r.score_breakdown,
+                r.algorithm_version,
+                r.created_at,
+                COALESCE(s.title, p.name, sol.title, em.title) AS title
+            FROM ai_recommendations r
+            LEFT JOIN services s ON r.service_id = s.id
+            LEFT JOIN products p ON r.product_id = p.id
+            LEFT JOIN solidarity_posts sol ON r.solidarity_post_id = sol.id
+            LEFT JOIN emergencies em ON r.emergency_id = em.id
+            WHERE r.user_id = :user_id
+        """
+        params = {"user_id": user_id, "limit": limit}
+        if rec_type:
+            query_sql += " AND r.recommendation_type = :rec_type"
+            params["rec_type"] = rec_type
+        query_sql += " ORDER BY r.score DESC, r.created_at DESC LIMIT :limit"
+
+        res = await self.session.execute(text(query_sql), params)
+        rows = res.mappings().all()
+        return [dict(r) for r in rows]

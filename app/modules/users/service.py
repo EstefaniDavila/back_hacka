@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, Optional
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import EntityNotFoundException, ValidationException
@@ -88,13 +88,42 @@ class UserService:
             logger.info("Nuevo perfil creado para el usuario %s (%s)", user_id, resolved_name)
         return profile
 
+    async def _enrich_profile_response(self, profile: Profile) -> ProfileResponse:
+        """Enriquece el modelo Profile con la dirección principal y coordenadas registradas."""
+        resp = ProfileResponse.model_validate(profile)
+        try:
+            stmt = text("""
+                SELECT a.street_address, a.reference, a.latitude, a.longitude, d.name AS district_name,
+                       ua.residence_status, cm.community_id
+                FROM user_addresses ua
+                JOIN addresses a ON ua.address_id = a.id
+                LEFT JOIN districts d ON a.district_id = d.id
+                LEFT JOIN community_memberships cm ON cm.user_id = ua.user_id AND cm.membership_status = 'active'
+                WHERE ua.user_id = :user_id AND ua.is_primary IS TRUE
+                LIMIT 1
+            """)
+            res = await self.session.execute(stmt, {"user_id": profile.id})
+            row = res.fetchone()
+            if row:
+                resp.street_address = row[0]
+                resp.address = row[0]
+                resp.reference = row[1]
+                resp.latitude = float(row[2]) if row[2] is not None else None
+                resp.longitude = float(row[3]) if row[3] is not None else None
+                resp.district_name = row[4]
+                resp.residence_status = row[5]
+                resp.community_id = row[6]
+        except Exception as e:
+            logger.warning("No se pudo enriquecer perfil con dirección para %s: %s", profile.id, str(e))
+        return resp
+
     async def get_profile(self, user_id: uuid.UUID) -> ProfileResponse:
-        """Obtiene los datos del perfil del usuario."""
+        """Obtiene los datos del perfil del usuario enriquecido con dirección y coordenadas."""
         profile = await self.profile_repo.get_by_id(user_id)
         if not profile:
             # Crear perfil por defecto si aún no existe
             profile = await self.get_or_create_profile(user_id)
-        return ProfileResponse.model_validate(profile)
+        return await self._enrich_profile_response(profile)
 
     async def update_profile(
         self,

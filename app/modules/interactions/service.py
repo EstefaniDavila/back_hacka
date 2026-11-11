@@ -23,7 +23,35 @@ class ReviewService:
         reviewer_id: uuid.UUID,
         data: ReviewCreate,
     ) -> ReviewResponse:
-        """Crea una nueva reseña o calificación."""
+        """Crea o actualiza una reseña validando la interacción completada bilateralmente."""
+        from sqlalchemy import select
+        from app.core.exceptions import EntityNotFoundException, ValidationException
+        from app.modules.commerce.models import Service
+        from app.modules.chat.models import ChatConversation, ChatParticipant
+
+        if data.service_id:
+            service = await self.session.get(Service, data.service_id)
+            if not service:
+                raise EntityNotFoundException("Servicio", data.service_id)
+            if service.provider_id == reviewer_id:
+                raise ValidationException("No puedes calificar tu propio servicio.")
+
+            stmt_completed = (
+                select(ChatConversation.id)
+                .join(ChatParticipant, ChatParticipant.conversation_id == ChatConversation.id)
+                .where(
+                    ChatConversation.service_id == data.service_id,
+                    ChatConversation.service_status == "completed",
+                    ChatParticipant.user_id == reviewer_id,
+                )
+                .limit(1)
+            )
+            completed_res = await self.session.execute(stmt_completed)
+            if not completed_res.scalar_one_or_none():
+                raise ValidationException(
+                    "Para calificar este servicio, debes haber completado la interacción bilateralmente a través del chat de VeciRed."
+                )
+
         review = await self.review_repo.create_review(reviewer_id, data)
         reviewer_profile = await self.profile_repo.get_by_id(reviewer_id)
         await self.session.commit()

@@ -3,6 +3,7 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 
+from app.core.security import CurrentUser, get_current_user, get_optional_current_user
 from app.modules.search.dependencies import get_search_service
 from app.modules.search.schemas import (
     GlobalSearchResponse,
@@ -35,6 +36,9 @@ async def search_all(
     sort: SearchSort = Query(SearchSort.RECOMMENDED, description="Criterio de ordenación: relevance, distance, recommended"),
     page: int = Query(1, ge=1, description="Página actual"),
     page_size: int = Query(20, ge=1, le=100, description="Cantidad de resultados por página"),
+    include_emergencies: bool = Query(True, description="Incluir emergencias en los resultados consolidados"),
+    modules: Optional[str] = Query(None, description="Módulos a incluir separados por comas: services,products,solidarity,emergencies"),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
     service: SearchService = Depends(get_search_service),
 ):
     """
@@ -53,6 +57,9 @@ async def search_all(
         sort=sort,
         page=page,
         page_size=page_size,
+        user_id=current_user.id if current_user else None,
+        include_emergencies=include_emergencies,
+        modules=modules,
     )
 
 
@@ -75,6 +82,7 @@ async def search_services(
     sort: SearchSort = Query(SearchSort.RECOMMENDED, description="relevance, distance, recommended"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
     service: SearchService = Depends(get_search_service),
 ):
     """
@@ -91,6 +99,7 @@ async def search_services(
         sort=sort,
         page=page,
         page_size=page_size,
+        user_id=current_user.id if current_user else None,
     )
 
 
@@ -113,6 +122,7 @@ async def search_products(
     sort: SearchSort = Query(SearchSort.RECOMMENDED, description="relevance, distance, recommended"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
     service: SearchService = Depends(get_search_service),
 ):
     """
@@ -129,6 +139,7 @@ async def search_products(
         sort=sort,
         page=page,
         page_size=page_size,
+        user_id=current_user.id if current_user else None,
     )
 
 
@@ -151,6 +162,7 @@ async def search_solidarity(
     sort: SearchSort = Query(SearchSort.RECOMMENDED, description="relevance, distance, recommended"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
     service: SearchService = Depends(get_search_service),
 ):
     """
@@ -167,6 +179,7 @@ async def search_solidarity(
         sort=sort,
         page=page,
         page_size=page_size,
+        user_id=current_user.id if current_user else None,
     )
 
 
@@ -189,6 +202,7 @@ async def search_emergencies(
     sort: SearchSort = Query(SearchSort.RECOMMENDED, description="relevance, distance, recommended"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    current_user: Optional[CurrentUser] = Depends(get_optional_current_user),
     service: SearchService = Depends(get_search_service),
 ):
     """
@@ -206,5 +220,27 @@ async def search_emergencies(
         sort=sort,
         page=page,
         page_size=page_size,
+        user_id=current_user.id if current_user else None,
+    )
+
+
+# ----------------------------------------------------------------------
+# 6. RECOMENDACIONES PERSISTIDAS (AI RECOMMENDATIONS)
+# ----------------------------------------------------------------------
+@router.get(
+    "/recommendations",
+    summary="Consultar recomendaciones activas del usuario persistidas por IA",
+)
+async def get_persisted_recommendations(
+    rec_type: Optional[str] = Query(None, description="Filtrar por tipo: service, product, solidarity, emergency"),
+    limit: int = Query(10, ge=1, le=50),
+    current_user: CurrentUser = Depends(get_current_user),
+    service: SearchService = Depends(get_search_service),
+):
+    """Retorna las recomendaciones activas calculadas por el motor de IA para el usuario."""
+    return await service.get_user_recommendations(
+        user_id=current_user.id,
+        rec_type=rec_type,
+        limit=limit,
     )
 

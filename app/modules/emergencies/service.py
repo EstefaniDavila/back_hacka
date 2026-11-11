@@ -2,7 +2,7 @@
 import math
 import uuid
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +100,12 @@ class EmergencyService:
         lng = float(addr.longitude) if addr and addr.longitude is not None else None
         loc_str = addr.street_address if addr else None
 
+        # Sala de coordinación de chat asociada a la emergencia
+        from app.modules.chat.models import ChatConversation
+        conv_stmt = select(ChatConversation.id).where(ChatConversation.emergency_id == emergency_id)
+        conv_res = await self.session.execute(conv_stmt)
+        conv_id = conv_res.scalar_one_or_none()
+
         return EmergencyDetailResponse(
             id=emg.id,
             reported_by=emg.reported_by,
@@ -117,6 +123,8 @@ class EmergencyService:
             latitude=lat,
             longitude=lng,
             location=loc_str,
+            conversation_id=conv_id,
+            can_access_chat=bool(conv_id),
             needs_count=len(needs),
             volunteers_count=4,
             radius_m=500,
@@ -164,6 +172,19 @@ class EmergencyService:
                 quantity_required=r_qty,
                 unit=r_unit,
             )
+
+        # Crear sala grupal de coordinación asociada a la emergencia en chat
+        try:
+            from app.modules.chat.repository import ChatRepository
+            chat_repo = ChatRepository(self.session)
+            await chat_repo.create_emergency_coordination_chat(
+                emergency_id=emg.id,
+                reporter_id=user_id,
+                community_id=community_id,
+                title=f"🚨 Coordinación: {emg.title}",
+            )
+        except Exception:
+            pass
 
         # Emitir notificaciones de alerta inmediata a los vecinos de la comunidad
         try:
@@ -214,6 +235,16 @@ class EmergencyService:
             raise EntityNotFoundException("Emergencia", emergency_id)
 
         await self.repository.update_status(emg, status_update.status)
+
+        # Si se resuelve o cierra la emergencia, cerrar la sala grupal de chat
+        if status_update.status in ["atendida", "cerrada"]:
+            try:
+                from app.modules.chat.repository import ChatRepository
+                chat_repo = ChatRepository(self.session)
+                await chat_repo.close_emergency_chat(emergency_id)
+            except Exception:
+                pass
+
         await self.session.commit()
         return await self.get_emergency_detail(emg.id)
 
@@ -317,6 +348,27 @@ class EmergencyService:
             distance_m=dist,
             status=data.status or "En camino"
         )
+
+        # Incorporar automáticamente al brigadista en la sala grupal de chat de la emergencia
+        if emergency_id:
+            try:
+                from app.modules.chat.repository import ChatRepository
+                chat_repo = ChatRepository(self.session)
+                conv = await chat_repo.get_conversation_by_emergency_id(emergency_id)
+                if conv:
+                    part, freshly_added = await chat_repo.add_or_reactivate_participant(
+                        conversation_id=conv.id,
+                        user_id=user_id,
+                        role="brigadista",
+                    )
+                    if freshly_added:
+                        await chat_repo.create_message(
+                            conversation_id=conv.id,
+                            sender_id=user_id,
+                            text=f"🤝 {vol_name} se ha unido a la brigada de guardia vecinal.",
+                        )
+            except Exception:
+                pass
         
         return await self.get_emergency_volunteers(emergency_id)
 

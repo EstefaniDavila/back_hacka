@@ -68,6 +68,7 @@ class ServiceCreate(BaseModel):
     price_from: Optional[Decimal] = Field(None, ge=0, description="Precio inicial o referencia en Soles")
     price_unit: Optional[str] = Field("servicio", max_length=30, description="Unidad de precio (hora, visita, servicio, presupuesto)")
     availability: Optional[str] = Field(None, max_length=100, description="Disponibilidad horaria (ej: 'Lunes a Viernes', '24/7')")
+    image_url: Optional[str] = Field(None, max_length=500, description="URL de imagen ilustrativa del servicio")
 
 
 class ServiceUpdate(BaseModel):
@@ -77,6 +78,7 @@ class ServiceUpdate(BaseModel):
     price_from: Optional[Decimal] = Field(None, ge=0)
     price_unit: Optional[str] = Field(None, max_length=30)
     availability: Optional[str] = Field(None, max_length=100)
+    image_url: Optional[str] = Field(None, max_length=500)
 
 
 class ServiceStatusUpdate(BaseModel):

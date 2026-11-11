@@ -32,6 +32,21 @@ class ReviewRepository:
         if not reviewed_user_id:
             reviewed_user_id = reviewer_id  # Fallback
 
+        if data.service_id:
+            stmt_existing = select(Review).where(
+                Review.reviewer_id == reviewer_id,
+                Review.service_id == data.service_id,
+            )
+            res_existing = await self.session.execute(stmt_existing)
+            existing_review = res_existing.scalar_one_or_none()
+            if existing_review:
+                existing_review.rating = data.rating
+                existing_review.comment = data.comment
+                existing_review.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                await self.session.flush()
+                await self.session.refresh(existing_review)
+                return existing_review
+
         review = Review(
             id=uuid.uuid4(),
             reviewer_id=reviewer_id,

@@ -93,6 +93,8 @@ class EmergencyListItemResponse(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location: Optional[str] = None
+    conversation_id: Optional[uuid.UUID] = None
+    can_access_chat: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 

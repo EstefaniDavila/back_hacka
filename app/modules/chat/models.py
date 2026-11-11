@@ -15,6 +15,13 @@ class ChatConversation(Base):
     community_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("communities.id"), nullable=True)
     title: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
     is_group: Mapped[bool] = mapped_column(Boolean, default=False)
+    service_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("services.id"), nullable=True)
+    initiator_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("profiles.id"), nullable=True)
+    emergency_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("emergencies.id", ondelete="CASCADE"), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="active", nullable=True)
+    service_status: Mapped[Optional[str]] = mapped_column(String(30), default=None, nullable=True)
+    client_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    provider_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
@@ -26,7 +33,10 @@ class ChatParticipant(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("chat_conversations.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="member", nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
     joined_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    left_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class ChatMessage(Base):

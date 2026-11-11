@@ -381,8 +381,24 @@ class CommerceRepository:
         rating: int,
         comment: Optional[str] = None,
     ) -> Review:
-        """Crea una valoración para un servicio y su prestador."""
+        """Crea o actualiza la valoración única de un vecino para un servicio (upsert sin duplicados)."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        stmt_existing = select(Review).where(
+            Review.reviewer_id == reviewer_id,
+            Review.service_id == service_id,
+        )
+        res_existing = await self.session.execute(stmt_existing)
+        existing_review = res_existing.scalar_one_or_none()
+
+        if existing_review:
+            existing_review.rating = rating
+            existing_review.comment = comment.strip() if comment else None
+            existing_review.created_at = now
+            await self.session.flush()
+            await self.session.refresh(existing_review)
+            return existing_review
+
         review = Review(
             id=uuid.uuid4(),
             reviewer_id=reviewer_id,
@@ -593,9 +609,21 @@ class CommerceRepository:
         items = []
         for row in results.mappings().all():
             row_dict = dict(row)
-            row_dict["rating"] = 4.8
-            row_dict["reviews_count"] = 12
-            row_dict["distance_m"] = 200
+            seller_id = row_dict.get("seller_id")
+            if seller_id:
+                stats = await self.session.execute(
+                    select(
+                        func.coalesce(func.avg(Review.rating), 0.0),
+                        func.count(Review.id),
+                    ).where(Review.reviewed_user_id == seller_id)
+                )
+                r_avg, r_cnt = stats.one()
+                row_dict["rating"] = round(float(r_avg), 1) if r_cnt > 0 else 0.0
+                row_dict["reviews_count"] = int(r_cnt)
+            else:
+                row_dict["rating"] = 0.0
+                row_dict["reviews_count"] = 0
+            row_dict["distance_m"] = None
             items.append(row_dict)
 
         return items, total
@@ -637,9 +665,21 @@ class CommerceRepository:
         if not row:
             return None
         row_dict = dict(row)
-        row_dict["rating"] = 4.8
-        row_dict["reviews_count"] = 12
-        row_dict["distance_m"] = 200
+        seller_id = row_dict.get("seller_id")
+        if seller_id:
+            stats = await self.session.execute(
+                select(
+                    func.coalesce(func.avg(Review.rating), 0.0),
+                    func.count(Review.id),
+                ).where(Review.reviewed_user_id == seller_id)
+            )
+            r_avg, r_cnt = stats.one()
+            row_dict["rating"] = round(float(r_avg), 1) if r_cnt > 0 else 0.0
+            row_dict["reviews_count"] = int(r_cnt)
+        else:
+            row_dict["rating"] = 0.0
+            row_dict["reviews_count"] = 0
+        row_dict["distance_m"] = None
         return row_dict
 
     async def create_product(

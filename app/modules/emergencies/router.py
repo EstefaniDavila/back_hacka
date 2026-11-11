@@ -276,7 +276,7 @@ async def list_community_reports(
 )
 async def create_community_report(
     emergency_id: str,
-    data: CommunityReportCreate, CommunityReportUpdate,
+    data: CommunityReportCreate,
     current_user: Optional[CurrentUser] = Depends(get_current_user),
     service: EmergencyService = Depends(get_emergency_service),
 ):

@@ -11,6 +11,7 @@ from app.modules.chat.schemas import (
     ConversationCreate,
     ConversationDetailResponse,
     ConversationListItem,
+    ServiceActionRequest,
 )
 from app.modules.chat.service import ChatService
 
@@ -43,6 +44,33 @@ async def create_chat(
 ):
     """Inicia una conversación directa entre dos vecinos (o recupera la existente si ya chatearon)."""
     return await service.get_or_create_conversation(current_user.id, data)
+
+
+@router.get(
+    "/emergency/{emergency_id}",
+    response_model=ConversationDetailResponse,
+    summary="Obtener la sala de coordinación asociada a una emergencia",
+)
+async def get_emergency_chat(
+    emergency_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+):
+    """Retorna los datos y mensajes de la sala grupal de una emergencia activa."""
+    return await service.get_emergency_chat(emergency_id, current_user.id)
+
+
+@router.post(
+    "/emergency/{emergency_id}/leave",
+    summary="Retirarse de la sala de coordinación de emergencia",
+)
+async def leave_emergency_chat(
+    emergency_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+):
+    """Permite al brigadista salir de la sala de coordinación, preservando su historial."""
+    return await service.leave_emergency_chat(emergency_id, current_user.id)
 
 
 @router.get(
@@ -94,4 +122,24 @@ async def send_message(
         conversation_id=resolved_id,
         sender_id=current_user.id,
         data=data,
+    )
+
+
+@router.post(
+    "/{conversation_id}/service-action",
+    response_model=ConversationDetailResponse,
+    summary="Actualizar flujo del servicio (acordar, confirmar finalización mutua, cancelar)",
+)
+async def update_service_action(
+    conversation_id: str,
+    action_data: ServiceActionRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    service: ChatService = Depends(get_chat_service),
+):
+    """Permite a cliente o prestador avanzar el estado del servicio y confirmar su finalización bilateral."""
+    resolved_id = await service.resolve_conversation_id(conversation_id, current_user.id)
+    return await service.handle_service_action(
+        conversation_id=resolved_id,
+        user_id=current_user.id,
+        action=action_data.action,
     )

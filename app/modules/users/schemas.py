@@ -39,6 +39,14 @@ class ProfileResponse(ProfileBase):
     solidarity_helped_count: Optional[int] = 0
     solidarity_received_count: Optional[int] = 0
     created_at: Optional[datetime] = None
+    address: Optional[str] = None
+    street_address: Optional[str] = None
+    reference: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    district_name: Optional[str] = None
+    community_id: Optional[uuid.UUID] = None
+    residence_status: Optional[str] = None
 
 
 class IdentityVerificationBase(BaseModel):

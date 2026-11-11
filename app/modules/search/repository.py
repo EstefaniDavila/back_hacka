@@ -47,6 +47,9 @@ SYNONYM_MAP: Dict[str, List[str]] = {
     "robo": ["seguridad", "alarma", "serenazgo", "policia", "sos", "asalto"],
     "incendio": ["bomberos", "fuego", "humo", "evacuacion", "urgencia", "emergencia"],
     "herramientas": ["taladro", "escalera", "martillo", "prestamo", "llaves", "pala"],
+    "cerrajero": ["cerrajeria", "cerrajería", "cerradura", "llave", "llaves", "candado"],
+    "cerrajeria": ["cerrajero", "cerrajería", "cerradura", "llave", "llaves", "candado"],
+    "cerrajería": ["cerrajero", "cerrajeria", "cerradura", "llave", "llaves", "candado"],
 }
 
 
@@ -59,21 +62,44 @@ def strip_accents(text: str) -> str:
 
 
 def expand_query_terms(query: Optional[str]) -> List[str]:
-    """Expande la búsqueda con variantes sin acentos y sinónimos contextuales peruanos."""
+    """Expande la búsqueda con variantes con/sin acentos y sinónimos contextuales peruanos."""
     if not query or not query.strip():
         return []
 
+    q_lower = query.strip().lower()
     clean = strip_accents(query.strip())
-    tokens = [t for t in clean.split() if len(t) > 1]
-    expanded = set(tokens)
+    
+    raw_tokens = [t for t in q_lower.split() if len(t) > 1]
+    clean_tokens = [t for t in clean.split() if len(t) > 1]
+    
+    expanded = set(raw_tokens) | set(clean_tokens)
 
     # Agregar el término completo si es de varias palabras
-    if len(tokens) > 1:
+    if len(clean_tokens) > 1:
         expanded.add(clean)
+        expanded.add(q_lower)
 
-    for token in tokens:
+    # Generar variantes fonéticas comunes de acentuación en español
+    accent_replacements = [
+        ("ia", "ía"), ("ía", "ia"),
+        ("on", "ón"), ("ón", "on"),
+        ("eria", "ería"), ("ería", "eria"),
+        ("acion", "ación"), ("ación", "acion")
+    ]
+    variants = set()
+    for tok in list(expanded):
+        for old, new in accent_replacements:
+            if old in tok:
+                variants.add(tok.replace(old, new))
+    expanded.update(variants)
+
+    for token in list(expanded):
         if token in SYNONYM_MAP:
             for syn in SYNONYM_MAP[token]:
+                expanded.add(syn)
+        stripped = strip_accents(token)
+        if stripped in SYNONYM_MAP:
+            for syn in SYNONYM_MAP[stripped]:
                 expanded.add(syn)
 
     return list(expanded)

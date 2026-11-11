@@ -21,6 +21,9 @@ class AIRecommendation(Base):
     service_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey('services.id'), nullable=True)
     product_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey('products.id'), nullable=True)
     solidarity_post_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey('solidarity_posts.id'), nullable=True)
+    emergency_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey('emergencies.id'), nullable=True)
     score: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 4), nullable=True)
+    score_breakdown: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    algorithm_version: Mapped[Optional[str]] = mapped_column(String(20), default="v1.0", nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 

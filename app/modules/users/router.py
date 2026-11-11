@@ -135,11 +135,11 @@ async def get_my_profile(
     Retorna el perfil del usuario actual a partir de su token de autenticación Supabase.
     Si el perfil no existía aún en la base de datos, lo crea automáticamente.
     """
-    profile = await service.get_or_create_profile(
+    await service.get_or_create_profile(
         user_id=current_user.id,
         email=current_user.email,
     )
-    return ProfileResponse.model_validate(profile)
+    return await service.get_profile(current_user.id)
 
 
 @router.put(

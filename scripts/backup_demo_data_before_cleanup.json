@@ -1,0 +1,569 @@
+{
+  "timestamp": "2026-11-10T17:41:00.472165+00:00",
+  "services": [
+    {
+      "id": "8000ee3b-a9af-50b4-9bf8-11bce30d367d",
+      "title": "Instalación y Mantenimiento Eléctrico Domiciliario (Demo)"
+    },
+    {
+      "id": "216dc5a3-94e2-5ca2-a072-de8fdb6b648b",
+      "title": "Reparación Urgente de Fugas y Tuberías (Demo)"
+    },
+    {
+      "id": "eb3c59db-a295-5398-ad0f-74f84e41d830",
+      "title": "Carpintería y Restauración de Muebles de Madera (Demo)"
+    },
+    {
+      "id": "3562f7df-2377-5532-8f25-84f55197d8eb",
+      "title": "Limpieza Profunda de Casas y Departamentos (Demo)"
+    },
+    {
+      "id": "34ddd253-e260-5b29-84a1-fee304d95db0",
+      "title": "Corte de Cabello y Estilismo a Domicilio (Demo)"
+    },
+    {
+      "id": "94ab2db0-ea9a-5a1d-b43d-9f965f0d5211",
+      "title": "Reparación y Mantenimiento de Laptops y PC (Demo)"
+    },
+    {
+      "id": "79f5e629-d64e-5920-a82e-4c1a9e3ef175",
+      "title": "Clases Particulares de Matemáticas y Física (Demo)"
+    },
+    {
+      "id": "494ce221-cb3c-5029-8a3c-6a0cd2ff5a18",
+      "title": "Jardinería, Poda y Diseño de Áreas Verdes (Demo)"
+    },
+    {
+      "id": "9a0626fd-3b0f-55df-bfb8-39d2c10f86aa",
+      "title": "Pintura de Fachadas e Interiores Residenciales (Demo)"
+    },
+    {
+      "id": "c33fd57e-53ae-5e60-9ef5-d9901d0a4815",
+      "title": "Flete y Transporte Vecinal en Furgón Pequeño (Demo)"
+    },
+    {
+      "id": "4249c53c-115a-55be-a24b-8277cef713f6",
+      "title": "Revisión de Tableros Eléctricos y Cortocircuitos (Demo)"
+    },
+    {
+      "id": "f3a8badd-d891-5e03-b067-f7c4e0db1364",
+      "title": "Desatoro de Desagües e Instalación de Grifería (Demo)"
+    },
+    {
+      "id": "9188ce39-3fcb-579e-a42c-8a0a2452e436",
+      "title": "Fabricación de Repisas y Puertas de Madera (Demo)"
+    },
+    {
+      "id": "1cbd7acb-0edd-59d7-b9be-3e9fd006d2ad",
+      "title": "Lavado de Muebles, Colchones y Alfombras (Demo)"
+    },
+    {
+      "id": "1ee127e5-0f0b-5193-a92b-55ef44fdb84e",
+      "title": "Manicure, Pedicure y Tratamientos Faciales (Demo)"
+    },
+    {
+      "id": "9d05e1fe-51cf-5cc0-a2e6-ee03ead5d77b",
+      "title": "Formateo e Instalación de Programas y Antivirus (Demo)"
+    },
+    {
+      "id": "9f7ea129-976a-5e21-983e-15d18e9b8e88",
+      "title": "Apoyo Escolar en Lectura y Comunicación (Demo)"
+    },
+    {
+      "id": "e881ce19-27f9-5414-9b70-38a18fca3f60",
+      "title": "Mantenimiento de Césped y Fumigación de Jardín (Demo)"
+    },
+    {
+      "id": "ef79fbf5-7ef0-5a47-a064-3f53cf5b88be",
+      "title": "Tarrajeo, Empastado y Pintado de Paredes (Demo)"
+    },
+    {
+      "id": "6e726b99-ebf2-5b33-8ba0-7e030f297631",
+      "title": "Mudanzas Pequeñas y Traslado de Carga Ligera (Demo)"
+    }
+  ],
+  "products": [
+    {
+      "id": "b24c7aa8-974c-573f-911e-c0e399929110",
+      "name": "Pan Artesanal de Masa Madre (Demo)"
+    },
+    {
+      "id": "dc1c2fdc-3372-5b0a-9b9f-388d58d81838",
+      "name": "Queque Casero de Plátano y Nuez (Demo)"
+    },
+    {
+      "id": "3361e5e0-cd19-502c-8346-1cd80aee242d",
+      "name": "Canasta de Verduras y Frutas Frescas (Demo)"
+    },
+    {
+      "id": "ae37b88b-db0f-523b-abfe-f65a6b5440f7",
+      "name": "Miel de Abeja 100% Pura de Oxapampa (Demo)"
+    },
+    {
+      "id": "44c6b52d-09b0-5f81-88e1-eec2221846a9",
+      "name": "Aceite de Oliva Extra Virgen Prensado en Frío (Demo)"
+    },
+    {
+      "id": "d92e75d2-7d6a-5d2a-b4f3-e4f4651d5ba0",
+      "name": "Polos de Algodón Pima Peruano Cuello Redondo (Demo)"
+    },
+    {
+      "id": "99ac4ee1-5151-50e0-bb33-977139b5d081",
+      "name": "Casacas Térmicas Impermeables con Capucha (Demo)"
+    },
+    {
+      "id": "15eec96e-fac3-5afc-aeb3-9235754867f0",
+      "name": "Cargador Rápido USB-C 65W GaN (Demo)"
+    },
+    {
+      "id": "856f5bb5-096b-5499-88fa-185ef97cfedd",
+      "name": "Auriculares Bluetooth Inalámbricos con Micrófono (Demo)"
+    },
+    {
+      "id": "affc5b78-9dcb-5022-8dd6-1365e3fbf345",
+      "name": "Mouse Inalámbrico Ergonómico Silencioso (Demo)"
+    },
+    {
+      "id": "5545f14d-96a8-56f7-9079-401c2d0ba36b",
+      "name": "Juego de Sábanas 2 Plazas 100% Algodón (Demo)"
+    },
+    {
+      "id": "4d6079a5-6200-5a50-a6ff-ab3b0a6bfd28",
+      "name": "Organizadores de Cocina Multiuso de Acrílico (Demo)"
+    },
+    {
+      "id": "93871df7-7e88-5d31-afbe-03d94b1f7c46",
+      "name": "Lámpara LED de Escritorio Recargable con 3 Tonos (Demo)"
+    },
+    {
+      "id": "4bdda638-2121-5779-9afb-d512c2b673cb",
+      "name": "Pack de Cuadernos y Útiles Escolares Básicos (Demo)"
+    },
+    {
+      "id": "be011b05-3c01-52a9-a602-127df9596f95",
+      "name": "Set de Plumones y Colores Profesionales (Demo)"
+    },
+    {
+      "id": "cda21a80-213a-5b05-a2bf-58380c30f7d7",
+      "name": "Mochila Escolar Ergonómica Reforzada (Demo)"
+    },
+    {
+      "id": "007befe9-4a1e-555f-91e7-885aec715ddb",
+      "name": "Jabones Artesanales de Avena y Miel de Abeja (Demo)"
+    },
+    {
+      "id": "615a966e-eabd-5336-b1c9-156636075a5a",
+      "name": "Infusiones Andinas Orgánicas de Muña y Manzanilla (Demo)"
+    },
+    {
+      "id": "f5fa4341-1c2c-5f8c-b7ec-196e578421a8",
+      "name": "Detergente Ecológico y Suavizante Biodegradable (Demo)"
+    },
+    {
+      "id": "4120cc67-74d2-5eb6-b2bc-0c04affcc9da",
+      "name": "Velas Aromáticas de Cera de Soya en Frasco (Demo)"
+    }
+  ],
+  "solidarity": [
+    {
+      "id": "af1ba52e-ad32-5004-aef3-553273c5e097",
+      "title": "Se solicitan víveres no perecibles para olla común barrial (Demo)"
+    },
+    {
+      "id": "ffb9a217-ad10-5f06-b529-e46a68b53092",
+      "title": "Donación de canastas de verduras y hortalizas frescas (Demo)"
+    },
+    {
+      "id": "13cf0ce9-5a0c-542f-a1a0-f0e2ab864c47",
+      "title": "Ropa abrigadora para niños de 4 a 8 años (Demo)"
+    },
+    {
+      "id": "0b35c706-f2d3-5a10-b2b4-3d9ab8ea3470",
+      "title": "Donación de casacas y chompas de lana para adultos (Demo)"
+    },
+    {
+      "id": "4782c0d7-0296-5649-8152-d04e97f06a4a",
+      "title": "Se necesita jarabe de Paracetamol e Ibuprofeno para posta médica (Demo)"
+    },
+    {
+      "id": "dcc23ad7-e255-571f-8ac5-66c63f470de8",
+      "title": "Préstamo temporal de tensiómetro digital para adulto mayor (Demo)"
+    },
+    {
+      "id": "36687431-dbcd-5a63-b59f-0e4259b85616",
+      "title": "Voluntarios para clases de refuerzo escolar en primaria (Demo)"
+    },
+    {
+      "id": "5c000677-0d7b-5b08-8143-7085e440bcc9",
+      "title": "Donación de libros de texto escolar y cuentos infantiles (Demo)"
+    },
+    {
+      "id": "3367feaf-fa1a-5570-a194-9a062556548c",
+      "title": "Apoyo con movilidad para traslado a cita médica en hospital (Demo)"
+    },
+    {
+      "id": "2d664d47-1510-5efe-92c8-e117b9f49a69",
+      "title": "Ofrezco movilidad solidaria los domingos por la mañana (Demo)"
+    },
+    {
+      "id": "d00a27bf-928c-5fcd-abf8-dc511e0a7484",
+      "title": "Donación de coche de bebé y corralito plegable (Demo)"
+    },
+    {
+      "id": "24b0576f-023f-5989-904e-fe932231c487",
+      "title": "Se requiere silla de ruedas en préstamo temporal (Demo)"
+    },
+    {
+      "id": "da838478-63a9-58af-af04-a632a5276714",
+      "title": "Préstamo de taladro percutor y brocas para faena vecinal (Demo)"
+    },
+    {
+      "id": "21a77caf-f98d-5e51-b627-a7ee4a0be5ba",
+      "title": "Intercambio de plantas ornamentales y maceteros reciclados (Demo)"
+    },
+    {
+      "id": "c454068d-8250-5adc-98dc-5534038bc7bc",
+      "title": "Leche en fórmula y pañales talla M para madre soltera (Demo)"
+    },
+    {
+      "id": "fcb8edd8-faee-555e-864d-e3107635c232",
+      "title": "Donación de frazadas térmicas para familias de zonas altas (Demo)"
+    },
+    {
+      "id": "2754eeaa-4ed4-509d-8e7c-c27b872837a4",
+      "title": "Clases gratuitas de inglés conversacional para jóvenes (Demo)"
+    },
+    {
+      "id": "5c7983c1-b781-57a7-a2bd-f7a70267d3d4",
+      "title": "Donación de botiquín comunal con gasas, alcohol y vendas (Demo)"
+    },
+    {
+      "id": "3fdebcd6-325f-5ddd-b9db-1d0be7fb731e",
+      "title": "Herramientas de jardinería para limpieza del parque barrial (Demo)"
+    },
+    {
+      "id": "66a9c813-bac4-5446-bff4-b6887a6cb17c",
+      "title": "Traslado de víveres recolectados hacia comedor popular (Demo)"
+    }
+  ],
+  "emergencies": [
+    {
+      "id": "f26d94ab-9f5a-40d1-bf88-f1648a8a8697",
+      "title": "Incendio o Cortocircuito en Manzana 2"
+    },
+    {
+      "id": "acbec58e-ccea-4515-aeaa-cb4d1fa112bb",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "1af254cf-1402-4d66-95f4-822d11fea5c1",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "e2092036-3076-4fcd-ad41-f2c1fe7cc691",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "18d784cb-36bf-4d2d-9609-8a62522a0fd3",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "079a54b2-094e-4a88-919c-250278b63896",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "c92f808a-a576-4e31-a67f-01b1e5e40105",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "b0d68cd8-58ad-49b3-89e7-35ab2226fc8a",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "b483456c-05b2-4d38-b19e-6c959642f05d",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "5e929b03-f301-4dc6-8e8d-e81e9fdf32b0",
+      "title": "Daño Estructural / Sismo en Manzana 2"
+    },
+    {
+      "id": "c10be683-793c-47f2-af4c-65e4800d9853",
+      "title": "Corte masivo de agua / luz en Manzana 2"
+    },
+    {
+      "id": "166ac28a-ef39-4cd7-8bee-8e4366a0b2ec",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "52a570da-81c7-4a7d-99b3-1697f6b6f1e3",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "60b9eca2-fd60-4d3d-9f2c-9be970574dff",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "0541e719-ca8c-40c6-bcd0-511448eac2a0",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "d5e71113-da94-43da-8cd3-c8a5baedc578",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "b7247a77-f965-4bef-8679-c9dd983898ae",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "5db44118-03a5-4254-a058-63b4c66cc8ad",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "4ede2b80-25a4-456b-8d38-e3e4dfb46160",
+      "title": "Emergencia médica en Manzana 2"
+    },
+    {
+      "id": "81b58511-8069-50ae-96f4-d7af834d1be8",
+      "title": "[DEMO] Fuga de gas activa en cocina multifamiliar"
+    },
+    {
+      "id": "1370d66d-cc08-5cf0-be71-08301f29391f",
+      "title": "[DEMO] Principio de incendio por cortocircuito en poste eléctrico"
+    },
+    {
+      "id": "0016ae77-93a5-5cfb-b51a-9fe32c6dbe87",
+      "title": "[DEMO] Adulto mayor descompensado requiere primeros auxilios urgente"
+    },
+    {
+      "id": "9b08732c-24b0-5f35-bd2f-2bdb75ad971f",
+      "title": "[DEMO] Rotura de tubería matriz e inundación de calle"
+    },
+    {
+      "id": "128c4aea-7543-5aab-ab64-e7c636a3df6e",
+      "title": "[DEMO] Poste de alumbrado inclinado con riesgo de caída"
+    },
+    {
+      "id": "253d94ff-366a-5e8a-aa02-47e93c70f239",
+      "title": "[DEMO] Intento de robo a transeúnte reportado por vecinos"
+    },
+    {
+      "id": "ac933852-da74-5291-a241-3af9e3798e3b",
+      "title": "[DEMO] Rama de gran tamaño a punto de caer sobre vereda"
+    },
+    {
+      "id": "d150cf6d-115f-529e-9768-f9806cd0c5b8",
+      "title": "[DEMO] Mascota atrapada en rejilla de canal de desagüe"
+    },
+    {
+      "id": "62dea09a-ff13-53f4-b576-929b60232744",
+      "title": "[DEMO] Alarma vecinal activada por error técnico"
+    },
+    {
+      "id": "5b236d81-6327-5966-85c0-f8a7099a0f34",
+      "title": "[DEMO] Acumulación de desmonte en vía pública"
+    },
+    {
+      "id": "63b6b11a-8ae3-42b0-a3ad-5ccf250ac841",
+      "title": "Incendio o Cortocircuito en Manzana 2"
+    }
+  ],
+  "reviews": [
+    {
+      "id": "f6f33411-6a1d-53ad-a9cd-7f1b29393604",
+      "rating": 5
+    },
+    {
+      "id": "1e6168d4-1391-5fa1-98bd-9726976ddf8d",
+      "rating": 5
+    },
+    {
+      "id": "86b76875-c19c-5487-b661-4d2d1908ca46",
+      "rating": 5
+    },
+    {
+      "id": "06c4f0ab-5737-5985-9df0-53580811fb97",
+      "rating": 4
+    },
+    {
+      "id": "4d3adebe-477b-5734-bdb7-3a06804d82ec",
+      "rating": 5
+    },
+    {
+      "id": "c761c81b-0c30-5328-b4e7-e7eb3c1d351e",
+      "rating": 5
+    },
+    {
+      "id": "938a75a5-420a-5d50-a751-59e8d01898b3",
+      "rating": 5
+    },
+    {
+      "id": "49303d80-9e9a-5d3b-ba7d-d80bc6e5f74e",
+      "rating": 5
+    },
+    {
+      "id": "f59b68cd-abf2-55e0-ab07-d11a385a6613",
+      "rating": 5
+    },
+    {
+      "id": "87c4e8da-5da5-55b9-8c12-6d5b38eb4fe6",
+      "rating": 4
+    },
+    {
+      "id": "c78797ac-acd1-5c44-96a9-7570ece0b340",
+      "rating": 5
+    },
+    {
+      "id": "4e3ed28e-0c86-526f-84a5-2af575f551ea",
+      "rating": 5
+    },
+    {
+      "id": "0e83e675-e27c-580c-a2de-f21c6a67b881",
+      "rating": 5
+    },
+    {
+      "id": "7fd37f5d-8c8c-5527-9f93-acd8e3b6d5a2",
+      "rating": 5
+    },
+    {
+      "id": "6d090bc2-611d-58f0-924a-3b5f569f5c18",
+      "rating": 5
+    },
+    {
+      "id": "9a3d4ad5-d00b-5abd-a15f-3cf6dbabab09",
+      "rating": 5
+    },
+    {
+      "id": "a7f40b54-8e51-5872-9028-3fab26abbb21",
+      "rating": 5
+    },
+    {
+      "id": "2243861d-a8a9-5e11-8264-94478e8edf79",
+      "rating": 5
+    },
+    {
+      "id": "7d01379c-d52e-5a2e-a4c0-74ed6757bcec",
+      "rating": 4
+    },
+    {
+      "id": "f63f145f-e893-5c54-b898-67d92eaa4be1",
+      "rating": 5
+    },
+    {
+      "id": "ac6bcc30-c70b-5439-a297-68ad7a874fc9",
+      "rating": 5
+    },
+    {
+      "id": "f3cffd2f-b07e-54b4-86cf-8d23c274e9e7",
+      "rating": 5
+    },
+    {
+      "id": "bc6cda93-9334-56a4-a2ea-357e02469f25",
+      "rating": 5
+    },
+    {
+      "id": "a748d25b-0386-5778-aab2-b2f5e189c450",
+      "rating": 5
+    },
+    {
+      "id": "47a2b68d-792e-5988-bb08-1c13f141d6ec",
+      "rating": 5
+    },
+    {
+      "id": "6e3129e8-2092-53df-97d7-387f5e120771",
+      "rating": 5
+    },
+    {
+      "id": "9c4bc751-88b4-51c1-a02a-e7fd02401d95",
+      "rating": 4
+    },
+    {
+      "id": "85d1088d-6014-5a48-9ac5-511a1fedd071",
+      "rating": 4
+    }
+  ],
+  "businesses": [
+    {
+      "id": "7a5a6ba5-b153-5baf-9120-6ba7094316a4",
+      "business_name": "Emprendimiento Carlos (Demo)"
+    },
+    {
+      "id": "1700dde8-4aab-53bf-a6e4-d2749a22bf3c",
+      "business_name": "Emprendimiento Elena (Demo)"
+    },
+    {
+      "id": "016db559-659f-5321-b159-e7d11fc1f956",
+      "business_name": "Emprendimiento Jorge (Demo)"
+    },
+    {
+      "id": "722d5822-0962-5524-887b-0418e2437fd0",
+      "business_name": "Emprendimiento Rosa (Demo)"
+    },
+    {
+      "id": "9e110f8f-397f-5897-9ed3-7fc55dc8f9ef",
+      "business_name": "Emprendimiento Manuel (Demo)"
+    },
+    {
+      "id": "c4c1dff0-57cb-5ba3-9b71-3d1e5777fb7c",
+      "business_name": "Emprendimiento Lucía (Demo)"
+    },
+    {
+      "id": "06232272-d4bc-5c20-aa23-f904448f5b56",
+      "business_name": "Emprendimiento Víctor (Demo)"
+    },
+    {
+      "id": "76828b98-7798-5be7-868d-f8a4e95f75e9",
+      "business_name": "Emprendimiento Camila (Demo)"
+    },
+    {
+      "id": "2a49553c-8662-5450-9aa7-9704cedb23f5",
+      "business_name": "Emprendimiento Raúl (Demo)"
+    },
+    {
+      "id": "2401f7df-3818-5a79-a933-ca06b1516eb5",
+      "business_name": "Emprendimiento Patricia (Demo)"
+    }
+  ],
+  "addresses": [
+    {
+      "id": "f01f3b3d-4d66-5df0-b655-ca1f21cdcef6",
+      "street_address": "Jr. Los Olivos 102 (Demo)"
+    },
+    {
+      "id": "ddafe9a9-7bd6-51cd-8ce7-9512deb97e9f",
+      "street_address": "Calle Las Palmeras 210 (Demo)"
+    },
+    {
+      "id": "2c297452-00ed-523f-a449-3859fdee5e6f",
+      "street_address": "Av. Antúnez de Mayolo 305 (Demo)"
+    },
+    {
+      "id": "c3ece905-4536-517b-9efd-17412eb36806",
+      "street_address": "Pasaje San Martín 140 (Demo)"
+    },
+    {
+      "id": "09ca3be0-99d6-587d-9cb9-82e02dd05916",
+      "street_address": "Jr. Huandoy 512 (Demo)"
+    },
+    {
+      "id": "80eacc23-db93-589a-a891-d5adfdf797d3",
+      "street_address": "Calle Los Pinos 408 (Demo)"
+    },
+    {
+      "id": "1878d7d9-da43-5424-9e9f-58b9a7aba5e9",
+      "street_address": "Av. Carlos Izaguirre 820 (Demo)"
+    },
+    {
+      "id": "90074060-352c-564c-bcff-83070e31797e",
+      "street_address": "Calle Los Sauces 115 (Demo)"
+    },
+    {
+      "id": "0b14a60a-7056-53ef-b89e-77020474711d",
+      "street_address": "Jr. Mercurio 230 (Demo)"
+    },
+    {
+      "id": "edac6e0e-2115-516d-bac5-c1c0505234ef",
+      "street_address": "Av. Las Palmeras 910 (Demo)"
+    }
+  ]
+}

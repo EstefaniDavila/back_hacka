@@ -2,6 +2,7 @@
 import math
 import uuid
 from typing import List, Optional, Sequence
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import EntityNotFoundException, ValidationException, VeciRedException
@@ -257,6 +258,26 @@ class CommerceService:
             raise VeciRedException(
                 message="No puedes calificar tu propio servicio.",
                 code="SELF_REVIEW_NOT_ALLOWED",
+                status_code=400,
+            )
+
+        # Validar que exista una interacción completada bilateralmente en el chat para este servicio
+        from app.modules.chat.models import ChatConversation, ChatParticipant
+        stmt_completed = (
+            select(ChatConversation.id)
+            .join(ChatParticipant, ChatParticipant.conversation_id == ChatConversation.id)
+            .where(
+                ChatConversation.service_id == service_id,
+                ChatConversation.service_status == "completed",
+                ChatParticipant.user_id == reviewer_id,
+            )
+            .limit(1)
+        )
+        completed_res = await self.session.execute(stmt_completed)
+        if not completed_res.scalar_one_or_none():
+            raise VeciRedException(
+                message="Para calificar este servicio, debes haber completado la interacción bilateralmente a través del chat de VeciRed.",
+                code="SERVICE_INTERACTION_NOT_COMPLETED",
                 status_code=400,
             )
 

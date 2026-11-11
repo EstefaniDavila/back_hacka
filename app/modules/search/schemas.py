@@ -49,6 +49,8 @@ class ServiceSearchResult(BaseModel):
     completed_interactions: int = 0
     distance_km: Optional[float] = None
     distance_meters: Optional[float] = None
+    proximity_tier: Optional[int] = Field(None, description="Nivel de proximidad: 1 (manzana) a 5 (hasta 10 km)")
+    proximity_label: Optional[str] = Field(None, description="Etiqueta barrial descriptiva de cercanía")
     community_id: Optional[uuid.UUID] = None
     community_name: Optional[str] = None
     district_name: Optional[str] = None
@@ -83,6 +85,8 @@ class ProductSearchResult(BaseModel):
     bayesian_rating: float = 4.0
     distance_km: Optional[float] = None
     distance_meters: Optional[float] = None
+    proximity_tier: Optional[int] = Field(None, description="Nivel de proximidad: 1 a 5")
+    proximity_label: Optional[str] = Field(None, description="Etiqueta descriptiva de cercanía")
     community_name: Optional[str] = None
     district_name: Optional[str] = None
     score: float = 0.0
@@ -110,6 +114,8 @@ class SolidaritySearchResult(BaseModel):
     is_urgent: bool = False
     distance_km: Optional[float] = None
     distance_meters: Optional[float] = None
+    proximity_tier: Optional[int] = Field(None, description="Nivel de proximidad: 1 a 5")
+    proximity_label: Optional[str] = Field(None, description="Etiqueta descriptiva de cercanía")
     community_name: Optional[str] = None
     district_name: Optional[str] = None
     score: float = 0.0
@@ -135,6 +141,8 @@ class EmergencySearchResult(BaseModel):
     occurred_at: Optional[datetime] = None
     distance_km: Optional[float] = None
     distance_meters: Optional[float] = None
+    proximity_tier: Optional[int] = Field(None, description="Nivel de proximidad: 1 a 5")
+    proximity_label: Optional[str] = Field(None, description="Etiqueta descriptiva de cercanía")
     community_name: Optional[str] = None
     district_name: Optional[str] = None
     score: float = 0.0
@@ -161,6 +169,8 @@ class UnifiedSearchResultItem(BaseModel):
     price_label: Optional[str] = None
     distance_km: Optional[float] = None
     distance_meters: Optional[float] = None
+    proximity_tier: Optional[int] = Field(None, description="Nivel de proximidad: 1 a 5")
+    proximity_label: Optional[str] = Field(None, description="Etiqueta descriptiva de cercanía")
     location_label: Optional[str] = None
     rating: Optional[float] = None
     reviews_count: Optional[int] = None
@@ -177,6 +187,9 @@ class SearchLocationMeta(BaseModel):
     longitude: Optional[float] = None
     radius_km: Optional[float] = None
     reference: Optional[str] = None
+    tier_reached: Optional[int] = Field(None, description="Nivel más cercano alcanzado con resultados (1 a 5)")
+    expansion_label: Optional[str] = Field(None, description="Mensaje explicativo del alcance de la búsqueda")
+    tier_counts: Optional[Dict[str, int]] = Field(default_factory=dict, description="Conteo de resultados por cada nivel de proximidad")
 
 
 class SearchPaginationMeta(BaseModel):
