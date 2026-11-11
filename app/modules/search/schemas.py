@@ -139,6 +139,10 @@ class EmergencySearchResult(BaseModel):
     reported_by: uuid.UUID
     reporter_name: Optional[str] = None
     occurred_at: Optional[datetime] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    location: Optional[str] = None
+    image_url: Optional[str] = None
     distance_km: Optional[float] = None
     distance_meters: Optional[float] = None
     proximity_tier: Optional[int] = Field(None, description="Nivel de proximidad: 1 a 5")

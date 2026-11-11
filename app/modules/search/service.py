@@ -727,7 +727,9 @@ class SearchService:
         STATUS_WEIGHTS = {
             "active": 1.0,
             "reported": 1.0,
+            "reportada": 1.0,
             "in_progress": 0.65,
+            "en_atencion": 0.85,
             "resolved": 0.15,
             "closed": 0.10,
         }
@@ -766,6 +768,7 @@ class SearchService:
             final_score = min(1.0, max(0.0, final_score))
             score_val = round(final_score, 4)
 
+            loc_label = item.get("street_address") or item.get("district_name") or item.get("community_name") or "Arequipa, Perú"
             emg_result = EmergencySearchResult(
                 id=item["id"],
                 title=item["title"],
@@ -776,6 +779,10 @@ class SearchService:
                 reported_by=item["reported_by"],
                 reporter_name=item["reporter_name"],
                 occurred_at=item["occurred_at"],
+                latitude=item.get("latitude"),
+                longitude=item.get("longitude"),
+                location=loc_label,
+                image_url=item.get("image_url"),
                 distance_km=dist_km,
                 distance_meters=dist_meters,
                 proximity_tier=tier,
