@@ -486,13 +486,14 @@ class SearchRepository:
                 dist_alias.c.name.label("district_name"),
                 addr_alias.c.latitude.label("latitude"),
                 addr_alias.c.longitude.label("longitude"),
+                addr_alias.c.street_address.label("street_address"),
             )
             .select_from(Emergency)
             .join(Profile, Emergency.reported_by == Profile.id)
             .join(Community, Emergency.community_id == Community.id)
             .outerjoin(addr_alias, Emergency.address_id == addr_alias.c.id)
             .outerjoin(dist_alias, addr_alias.c.district_id == dist_alias.c.id)
-            .where(or_(Emergency.status.is_(None), Emergency.status.in_(["active", "reported", "in_progress"])))
+            .where(or_(Emergency.status.is_(None), Emergency.status.in_(["active", "reported", "reportada", "in_progress", "en_atencion"])))
         )
 
         if severity:
@@ -536,6 +537,8 @@ class SearchRepository:
                 "community_id": emg.community_id,
                 "community_name": row.community_name,
                 "district_name": row.district_name,
+                "street_address": row.street_address,
+                "image_url": emg.image_url,
                 "latitude": lat,
                 "longitude": lon,
                 "occurred_at": emg.occurred_at,

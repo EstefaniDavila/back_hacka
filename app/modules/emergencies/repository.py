@@ -66,10 +66,14 @@ class EmergencyRepository:
                 Emergency.status,
                 Emergency.occurred_at,
                 Emergency.created_at,
+                Address.latitude,
+                Address.longitude,
+                Address.street_address.label("location"),
                 func.coalesce(needs_count_subq.c.needs_count, 0).label("needs_count"),
             )
             .outerjoin(Profile, Profile.id == Emergency.reported_by)
             .outerjoin(Community, Community.id == Emergency.community_id)
+            .outerjoin(Address, Address.id == Emergency.address_id)
             .outerjoin(needs_count_subq, needs_count_subq.c.emergency_id == Emergency.id)
         )
 
@@ -100,13 +104,21 @@ class EmergencyRepository:
         items = []
         for row in results.mappings().all():
             item_dict = dict(row)
+            if not item_dict.get("reporter_name"):
+                item_dict["reporter_name"] = "Vecino de la zona"
+            if not item_dict.get("community_name"):
+                item_dict["community_name"] = "Zona A"
             item_dict["volunteers_count"] = 0
             item_dict["radius_m"] = 500
+            if item_dict.get("latitude") is not None:
+                item_dict["latitude"] = float(item_dict["latitude"])
+            if item_dict.get("longitude") is not None:
+                item_dict["longitude"] = float(item_dict["longitude"])
             items.append(item_dict)
 
         return items, total
 
-    async def list_active_emergencies(self, community_id: Optional[uuid.UUID] = None, limit: int = 10) -> List[Dict[str, Any]]:
+    async def list_active_emergencies(self, community_id: Optional[uuid.UUID] = None, limit: int = 50) -> List[Dict[str, Any]]:
         """Retorna todas las emergencias activas de la comunidad en orden cronológico."""
         stmt = (
             select(
@@ -131,7 +143,7 @@ class EmergencyRepository:
             .outerjoin(Profile, Profile.id == Emergency.reported_by)
             .outerjoin(Community, Community.id == Emergency.community_id)
             .outerjoin(Address, Address.id == Emergency.address_id)
-            .where(Emergency.status.in_(["en_atencion", "reportada"]))
+            .where(Emergency.status.in_(["active", "reported", "reportada", "in_progress", "en_atencion"]))
         )
         if community_id:
             stmt = stmt.where(Emergency.community_id == community_id)
@@ -161,7 +173,7 @@ class EmergencyRepository:
     async def get_active_emergency(self, community_id: Optional[uuid.UUID] = None) -> Optional[Dict[str, Any]]:
         """
         Retorna la emergencia activa más prioritaria para el banner de la aplicación.
-        Busca estados 'en_atencion' o 'reportada'.
+        Busca estados activos o en atención.
         """
         stmt = (
             select(
@@ -179,10 +191,14 @@ class EmergencyRepository:
                 Emergency.status,
                 Emergency.occurred_at,
                 Emergency.created_at,
+                Address.latitude,
+                Address.longitude,
+                Address.street_address.label("location"),
             )
             .outerjoin(Profile, Profile.id == Emergency.reported_by)
             .outerjoin(Community, Community.id == Emergency.community_id)
-            .where(Emergency.status.in_(["en_atencion", "reportada"]))
+            .outerjoin(Address, Address.id == Emergency.address_id)
+            .where(Emergency.status.in_(["active", "reported", "reportada", "in_progress", "en_atencion"]))
         )
         if community_id:
             stmt = stmt.where(Emergency.community_id == community_id)
@@ -206,6 +222,10 @@ class EmergencyRepository:
         result["volunteers_count"] = 4
         result["radius_m"] = 500
         result["needs_count"] = 0
+        if result.get("latitude") is not None:
+            result["latitude"] = float(result["latitude"])
+        if result.get("longitude") is not None:
+            result["longitude"] = float(result["longitude"])
         return result
 
     async def get_address_by_id(self, address_id: Optional[uuid.UUID]):

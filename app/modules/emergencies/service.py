@@ -72,7 +72,7 @@ class EmergencyService:
     async def list_active_emergencies(
         self,
         community_id: Optional[uuid.UUID] = None,
-        limit: int = 10,
+        limit: int = 50,
     ) -> List[EmergencyListItemResponse]:
         """Obtiene todas las emergencias activas de la comunidad."""
         items = await self.repository.list_active_emergencies(community_id=community_id, limit=limit)
